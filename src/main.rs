@@ -42,7 +42,7 @@ fn read_configs() -> Vec<VORConfig> {
     
     let mut configs = Vec::<VORConfig>::new();
     let vor_root_dir = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR", get_user_home_dir());
-    let vor_config_dir = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\Configs", get_user_home_dir());
+    let vor_config_dir = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs", get_user_home_dir());
 
     //If vor & vor config folder doesnt exist make it
     if !path_exists(&vor_root_dir) {
