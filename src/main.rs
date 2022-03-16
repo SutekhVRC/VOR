@@ -111,7 +111,7 @@ fn main() {
 
     let configs = read_configs();
     if configs.len() < 1 {
-        println!("[?] Please put OSC application VOR configs in the [\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\Configs] directory.");
+        println!("[?] Please put OSC application VOR configs in the [\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs] directory.");
         println!("[-] No VOR configs found. Shutting down..");
         return;
     } else {
