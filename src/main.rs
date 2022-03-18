@@ -54,7 +54,7 @@ fn read_configs() -> Vec<VORConfig> {
 
     if !path_exists(&vor_config_dir) {
         fs::create_dir(&vor_config_dir).expect("[-] Cannot create VOR configs directory.");
-        println!("[+] Created VOR configs directory.")
+        println!("[+] Created VOR configs directory.");
     } else {
         println!("[*] VOR configs directory exists.");
     }
@@ -64,9 +64,9 @@ fn read_configs() -> Vec<VORConfig> {
     for f in config_files {
         let file = f.unwrap();
         if file.file_type().unwrap().is_file() {
+
             let file_n = file.file_name().to_str().expect("[-] Failed to parse file name.").to_string();
             let file_p = file.path().as_os_str().to_str().expect("[-] Failed to parse file path.").to_string();
-            //println!("[+] Got config: {}\n\t[PATH] {}", file.file_name().to_str().unwrap(), file.path().as_os_str().to_str().unwrap());
 
             let file_con = match fs::read_to_string(&file_p) {
                 Ok(c) => c,
@@ -86,11 +86,6 @@ fn read_configs() -> Vec<VORConfig> {
     }
     //println!("{:?}", configs);
     configs
-
-
-    // Parse each config and start each
-
-
 }
 
 /*
@@ -116,7 +111,7 @@ fn main() {
         return;
     } else {
         for c in &configs {
-            println!("[Load App]: {}\n\t[*] Route -> {}:{}", c.app_name, c.app_host, c.app_port);
+            println!("[App]: {}\n [*] Route -> {}:{}", c.app_name, c.app_host, c.app_port);
         }
     }
 
@@ -155,7 +150,6 @@ fn parse_vrc_osc(tx: Vec<Sender<Vec<u8>>>, vrc_sock: UdpSocket) {
         }
     }
 }
-
 
 fn route_app(rx: Receiver<Vec<u8>>, app: VORConfig) {
     let rhp = format!("{}:{}", app.app_host, app.app_port);
