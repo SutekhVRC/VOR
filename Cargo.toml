@@ -1,6 +1,6 @@
 [package]
 name = "vor"
-version = "0.1.0"
+version = "0.0.2"
 edition = "2021"
 authors = ["SutekhVRC"]
 
@@ -9,3 +9,4 @@ rosc = "0.6.0"
 serde_json = "1.0.79"
 serde = {version = "1.0.136", features = ["derive"]}
 directories = "4.0.1"
+eframe = "0.17.0"
