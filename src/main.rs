@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use eframe::NativeOptions;
 use eframe::egui::Ui;
 use rosc::{self};
