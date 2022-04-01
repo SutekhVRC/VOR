@@ -1,7 +1,8 @@
 #![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
-use eframe::egui::Ui;
+use eframe::egui::{Ui, Vec2, ScrollArea, Layout, LayerId, RichText};
+use eframe::epaint::Color32;
 use rosc::{self};
 use rosc::decoder::MTU;
 use serde_json;
@@ -57,6 +58,9 @@ struct VORGUI {
     tab: u8,
     router_channel: Option<Sender<RouterMsg>>,
     vor_router_config: RouterConfig,
+    adding_new_app: bool,
+    new_app: Option<VORConfigWrapper>,
+    new_app_cf_exists_err: bool,
 }
 
 impl VORGUI {
@@ -82,9 +86,15 @@ impl VORGUI {
         ui.label("Bind Port: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.bind_port));
         ui.label("VRChat Host: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vrc_host));
         ui.label("VRChat Port: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vrc_port));
-        if ui.button("Save").clicked() {
-            self.save_vor_config();
-        }
+
+        ui.horizontal(|ui| {
+            ui.with_layout(Layout::right_to_left(), |ui| {
+                if ui.button("Save").clicked() {
+                    self.save_vor_config();
+                }
+            });
+
+        });
     }
 
     fn router_exec_button(&mut self, ui: &mut egui::Ui) {
@@ -144,60 +154,115 @@ impl VORGUI {
         fs::write(&self.configs[app_index].0.config_path, serde_json::to_string(&self.configs[app_index].0.config_data).unwrap()).unwrap();
     }
 
-    fn list_app_configs(&mut self, ui: &mut egui::Ui) {
-        for i in 0..self.configs.len() {
-            ui.horizontal(|ui| {
-                if self.configs[i].1 {
+    fn add_app(&mut self, ui: &mut egui::Ui) {
+        // Get inputs
+        // Push object into configs
+        // 
+        ui.group(|ui| {
+            if self.adding_new_app {
+                ui.label("App Name");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_name));
+                ui.label("App Host");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_host));
+                ui.label("App Port");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_port));
+                ui.label("Bind Host");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_host));
+                ui.label("Bind Port");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_port));
 
-                    if ui.button("Save").clicked() {
-                        // Save config / uncollapse maybe
-                        self.save_app_config(i);
-                        self.configs[i].1 = false;// Being edited
-                    }
-                } else {
-                    ui.label(self.configs[i].0.config_data.app_name.as_str());
-                    if ui.button("Edit").clicked() {
-                        self.configs[i].1 = true;// Being edited
-                    }
-                }
-            });
-
-            if self.configs[i].1 {
-                ui.label("App Name");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_name));
-                ui.label("App Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_host));
-                ui.label("App Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_port));
-                ui.label("Bind Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_host));
-                ui.label("Bind Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_port));
-            }
-            ui.separator();
-
-
-            /*
-            let mut col = egui::CollapsingHeader::new(format!("App Name: {}", c.app_name));
-            if !self.an_col_saved {
-                col = col.open(Some(true))
-            } else {
-                
-            }
-            col.show(ui, |ui| {
-                //let mut an = String::from(c.app_name.as_str());
                 ui.horizontal(|ui| {
-                    let app_name_res = ui.add(egui::TextEdit::singleline(&mut c.app_name));
-                    if app_name_res.changed() {
-                        // Set index saved to false
-                        self.an_col_saved = false;
+                    if self.new_app_cf_exists_err {
+                        ui.colored_label(Color32::RED, "App config name already being used.. Choose different app name.");
                     }
-                    if ui.button("Save").clicked() {
-                        self.an_col_saved = true;
-                    }
+                    ui.horizontal(|ui| {
+                        ui.with_layout(Layout::right_to_left(), |ui| {
+                            if ui.button("Cancel").clicked() {
+                                self.new_app = None;
+                                self.adding_new_app = false;
+                                self.new_app_cf_exists_err = false;
+                            }
+                            if ui.button("Add").clicked() {
+                                self.new_app.as_mut().unwrap().config_path = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs\\{}.json", get_user_home_dir(), self.new_app.as_ref().unwrap().config_data.app_name);
+                                if !file_exists(&self.new_app.as_ref().unwrap().config_path) {
+                                    self.configs.push((self.new_app.take().unwrap(), false));
+                                    self.save_app_config(self.configs.len()-1);
+                                    self.adding_new_app = false;
+                                    self.new_app_cf_exists_err = false;
+                                } else {
+                                    self.new_app_cf_exists_err = true;
+                                }
+                                
+                            }
+                        });
+                    });
+
                 });
-            });
-            //ui.label(format!("{} -> {}:{}", c.app_name, c.app_host, c.app_port));
-            */
-        }
+
+
+            } else {
+                ui.horizontal(|ui| {
+                    ui.label("Add new VOR app");
+                    ui.with_layout(Layout::right_to_left(), |ui| {
+                        if ui.button("New").clicked() {
+                            self.new_app = Some(VORConfigWrapper {
+                                config_path: String::new(),
+                                config_data: VORConfig {
+                                    app_port: "9100".to_string(),
+                                    app_host: "127.0.0.1".to_string(),
+                                    bind_port: "9101".to_string(),
+                                    bind_host: "127.0.0.1".to_string(),
+                                    app_name: "New App".to_string(),
+                                },
+                            });// new_app defaults
+                            self.adding_new_app = true;// Being added
+                        }// New button
+                    });
+    
+                });
+            }
+
+        });
     }
 
-}
+    fn list_app_configs(&mut self, ui: &mut egui::Ui) {
+        
+        for i in 0..self.configs.len() {
+        
+            ui.group(|ui| {
+                if self.configs[i].1 {
+                    ui.label("App Name");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_name));
+                    ui.label("App Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_host));
+                    ui.label("App Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_port));
+                    ui.label("Bind Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_host));
+                    ui.label("Bind Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_port));
+
+                    ui.horizontal(|ui| {
+                        ui.with_layout(Layout::right_to_left(), |ui| {
+                            if ui.button("Save").clicked() {
+                                // Save config / uncollapse maybe
+                                self.save_app_config(i);
+                                self.configs[i].1 = false;// Being edited
+                            }
+                        });
+
+                    });
+
+
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label(self.configs[i].0.config_data.app_name.as_str());
+
+                        ui.with_layout(Layout::right_to_left(), |ui| {
+                            if ui.button("Delete").clicked() {
+                                fs::remove_file(&self.configs[i].0.config_path).unwrap();
+                                self.configs.remove(i);
+                            }
+                            if ui.button("Edit").clicked() {
+                                self.configs[i].1 = true;// Being edited
+                            }
+                        });
+                    });
+                }
+            });
+        }// For list
+    }
+}// impl VORGUI
 
 impl App for VORGUI {
     fn setup(&mut self, _ctx: &egui::Context, _frame: &eframe::epi::Frame, _storage: Option<&dyn eframe::epi::Storage>) {
@@ -208,6 +273,8 @@ impl App for VORGUI {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &eframe::epi::Frame) {
         CentralPanel::default().show(ctx, |ui| {
+            ctx.request_repaint();
+
             self.set_tab(ui);
             ui.separator();
 
@@ -221,9 +288,10 @@ impl App for VORGUI {
                 ui.group(|ui| {
                     ui.add(egui::Label::new("VOR App Configs"));
                     ui.separator();
-                    ui.group(|ui| {
+                    ScrollArea::new([true, true]).auto_shrink([true, true]).show(ui, |ui| {
                         self.list_app_configs(ui);
-                    })
+                        self.add_app(ui);
+                    });
 
                 });
             } else if self.tab == 2 {
@@ -361,6 +429,9 @@ fn main() {
 
     let (vor_router_config, configs) = config_construct();
 
+    let mut native_opts = NativeOptions::default();
+    native_opts.initial_window_size = Some(Vec2::new(300., 350.));
+
     run_native(
         Box::new(
             VORGUI {
@@ -369,7 +440,10 @@ fn main() {
                 tab: 0,
                 router_channel: None,
                 vor_router_config,
-    }), NativeOptions::default());
+                adding_new_app: false,
+                new_app: None,
+                new_app_cf_exists_err: false,
+    }), native_opts);
 
     /*
         Load configs
