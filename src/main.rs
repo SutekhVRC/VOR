@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
-use eframe::egui::{Ui, Vec2, ScrollArea, Layout, LayerId, RichText};
+use eframe::egui::{Ui, Vec2, ScrollArea, Label, Layout, LayerId, RichText, TopBottomPanel, Hyperlink, Context, Button};
 use eframe::epaint::Color32;
 use rosc::{self};
 use rosc::decoder::MTU;
@@ -16,7 +16,7 @@ use std::{fs, thread};
 use std::net::{UdpSocket, SocketAddr};
 use std::time::Duration;
 
-use eframe::{epi::App, egui::{self, CentralPanel}, run_native};
+use eframe::{epi::{App}, egui::{self, CentralPanel}, run_native};
 
 /*
     Filter bad OSC packets?
@@ -27,7 +27,7 @@ use eframe::{epi::App, egui::{self, CentralPanel}, run_native};
 // Create structure for handling router threads maybe
 enum RouterMsg {
     ShutdownAll,
-    RestartAll,
+    //RestartAll,
 }
 
 struct VORConfigWrapper {
@@ -64,8 +64,30 @@ struct VORGUI {
 }
 
 impl VORGUI {
-    fn set_tab(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+    fn set_tab(&mut self, ctx: &Context) {
+        //ui.horizontal(|ui| {
+        TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            egui::menu::bar(ui, |ui| {
+                ui.with_layout(Layout::left_to_right(), |ui| {
+                    let main_res = ui.add(Button::new(RichText::new("Main").monospace()));
+                    ui.separator();
+                    let apps_res = ui.add(Button::new(RichText::new("VOR Apps").monospace()));
+                    ui.separator();
+                    let conf_res = ui.add(Button::new(RichText::new("VOR Config").monospace()));
+        
+                    if main_res.clicked() {
+                        self.tab = 0;
+                    }
+                    if apps_res.clicked() {
+                        self.tab = 1;
+                    }
+                    if conf_res.clicked() {
+                        self.tab = 2;
+                    }
+                });
+            });
+        });
+/*
             if ui.button("Main").clicked() {
                 self.tab = 0;
             }
@@ -76,8 +98,8 @@ impl VORGUI {
             ui.separator();
             if ui.button("VOR Config").clicked() {
                 self.tab = 2;
-            }
-        });
+            }*/
+        //});
     }
 
     fn list_vor_config(&mut self, ui: &mut egui::Ui) {
@@ -169,6 +191,7 @@ impl VORGUI {
                 ui.horizontal(|ui| {
                     if self.new_app_cf_exists_err {
                         ui.colored_label(Color32::RED, "App config name already being used.. Choose different app name.");
+                        ui.separator();
                     }
                     ui.horizontal(|ui| {
                         ui.with_layout(Layout::right_to_left(), |ui| {
@@ -217,6 +240,25 @@ impl VORGUI {
                 });
             }
 
+        });
+    }
+
+    fn gui_header(&mut self, ui: &mut egui::Ui) {
+        ui.vertical_centered(|ui| {
+            ui.heading("VOR");
+            ui.add_space(3.);
+        });
+        ui.separator();
+    }
+
+    fn gui_footer(&mut self, ctx: &Context) {
+        TopBottomPanel::bottom("footer").show(ctx, |ui|{
+            ui.vertical_centered(|ui| {
+                ui.add_space(5.0);
+                ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
+                ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
+                ui.add_space(5.0);
+            });
         });
     }
 
@@ -272,11 +314,14 @@ impl App for VORGUI {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &eframe::epi::Frame) {
+        self.set_tab(&ctx);
         CentralPanel::default().show(ctx, |ui| {
             ctx.request_repaint();
 
-            self.set_tab(ui);
-            ui.separator();
+            self.gui_header(ui);
+
+            //self.set_tab(&ctx);
+            //ui.separator();
 
             if self.tab == 0 {
                 ui.group(|ui| {
@@ -288,11 +333,10 @@ impl App for VORGUI {
                 ui.group(|ui| {
                     ui.add(egui::Label::new("VOR App Configs"));
                     ui.separator();
-                    ScrollArea::new([true, true]).auto_shrink([true, true]).show(ui, |ui| {
+                    ScrollArea::new([false, true]).show(ui, |ui| {
                         self.list_app_configs(ui);
                         self.add_app(ui);
                     });
-
                 });
             } else if self.tab == 2 {
                 ui.group(|ui| {
@@ -303,6 +347,7 @@ impl App for VORGUI {
                 });
             }
         });
+        self.gui_footer(&ctx);
     }
 
     fn name(&self) -> &str {
@@ -430,7 +475,7 @@ fn main() {
     let (vor_router_config, configs) = config_construct();
 
     let mut native_opts = NativeOptions::default();
-    native_opts.initial_window_size = Some(Vec2::new(300., 350.));
+    native_opts.initial_window_size = Some(Vec2::new(350., 400.));
 
     run_native(
         Box::new(
