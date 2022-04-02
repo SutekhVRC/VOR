@@ -455,8 +455,6 @@ fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, bool)>) {
     let (vor_router_config, configs) = read_configs();
     if configs.len() < 1 {
         println!("[?] Please put OSC application VOR configs in the [\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs] directory.");
-        println!("[-] No VOR configs found. Shutting down..");
-        std::process::exit(0);
     } else {
         for c in &configs {
             println!("[App]: {}\n [*] Route -> {}:{}", c.config_data.app_name, c.config_data.app_host, c.config_data.app_port);
