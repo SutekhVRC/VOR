@@ -1,20 +1,21 @@
-#![windows_subsystem = "windows"]
+//#![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
-use eframe::egui::{Ui, Vec2, ScrollArea, Label, Layout, LayerId, RichText, TopBottomPanel, Hyperlink, Context, Button};
+use eframe::egui::{Vec2, ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Button};
 use eframe::epaint::Color32;
 use rosc::{self};
 use rosc::decoder::MTU;
 use serde_json;
 use serde::{Deserialize, Serialize};
 use directories::BaseDirs;
+use core::fmt;
 use std::sync::mpsc::{self, Sender, Receiver};
 
 //use std::fmt::format;
 use std::path::Path;
 use std::{fs, thread};
-use std::net::{UdpSocket, SocketAddr};
-use std::time::Duration;
+use std::net::{UdpSocket};
+//use std::time::Duration;
 
 use eframe::{epi::{App}, egui::{self, CentralPanel}, run_native};
 
@@ -52,8 +53,35 @@ struct RouterConfig {
     vrc_port: String,
 }
 
+struct VORAppError {
+    id: i32,
+    msg: String,
+
+}
+
+enum VORAppStatus {
+    Stopped,
+    Running,
+    AppError(VORAppError),
+}
+
+impl fmt::Display for VORAppStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            VORAppStatus::Stopped => write!(f, "Stopped"),
+            VORAppStatus::Running => write!(f, "Running"),
+            VORAppStatus::AppError(e) => write!(f, "{}: {}", e.msg, e.id),
+        }
+    }
+}
+
+struct VORAppIdentifier {
+    index: u64,
+    status: VORAppStatus,
+}
+
 struct VORGUI {
-    configs: Vec<(VORConfigWrapper, bool)>,
+    configs: Vec<(VORConfigWrapper, VORAppStatus, bool)>,
     running: bool,
     tab: u8,
     router_channel: Option<Sender<RouterMsg>>,
@@ -61,6 +89,7 @@ struct VORGUI {
     adding_new_app: bool,
     new_app: Option<VORConfigWrapper>,
     new_app_cf_exists_err: bool,
+    router_msg_recvr: Option<Receiver<VORAppIdentifier>>,
 }
 
 impl VORGUI {
@@ -87,19 +116,66 @@ impl VORGUI {
                 });
             });
         });
-/*
-            if ui.button("Main").clicked() {
-                self.tab = 0;
-            }
+    }
+
+    fn app_status_refresh(&mut self) {
+        let status = match self.router_msg_recvr.as_ref(){
+            Some(recvr) => {
+                match recvr.try_recv() {
+                    Ok(status) => status,
+                    Err(_e) => {return;},
+                }
+            },
+            None => return,
+        };
+        self.configs[status.index as usize].1 = status.status;
+    }
+
+    fn vor_status_refresh(&mut self) {
+
+    }
+
+    fn status(&mut self, ui: &mut egui::Ui) {
+
+        
+        //update vor status
+        self.vor_status_refresh();
+
+        ui.group(|ui| {
+            // Router Statuses
+            ui.label("VOR Status");
             ui.separator();
-            if ui.button("App Configs").clicked() {
-                self.tab = 1;
+            if self.running {
+                ui.horizontal(|ui| {
+                    ui.label("Status: ");ui.label(RichText::new("routing").color(Color32::GREEN));
+                });
+            } else {
+                ui.horizontal(|ui| {
+                    ui.label("Status: ");ui.label(RichText::new("stopped").color(Color32::RED));
+                });
             }
+        });
+        // update app statuses
+        self.app_status_refresh();// Maybe not every frame?
+        ui.group(|ui| {
+            // App Statuses
+            ui.label("VOR Apps");
             ui.separator();
-            if ui.button("VOR Config").clicked() {
-                self.tab = 2;
-            }*/
-        //});
+            if self.configs.len() > 0 {
+                for i in 0..self.configs.len() {
+                    let mut status_color = Color32::GREEN;
+                    match self.configs[i].1 {
+                        VORAppStatus::Running => {},
+                        VORAppStatus::Stopped => {status_color = Color32::RED},
+                        VORAppStatus::AppError(_) => {status_color = Color32::GOLD}
+                    }
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{}: ", self.configs[i].0.config_data.app_name));
+                        ui.label(RichText::new(format!("{}", self.configs[i].1)).color(status_color));
+                    });
+                }
+            }
+        });
     }
 
     fn list_vor_config(&mut self, ui: &mut egui::Ui) {
@@ -111,7 +187,7 @@ impl VORGUI {
 
         ui.horizontal(|ui| {
             ui.with_layout(Layout::right_to_left(), |ui| {
-                if ui.button("Save").clicked() {
+                if ui.button(RichText::new("Save").color(Color32::GREEN)).clicked() {
                     self.save_vor_config();
                 }
             });
@@ -121,28 +197,34 @@ impl VORGUI {
 
     fn router_exec_button(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if self.running {
-                if ui.button("Stop").clicked() {
-                    self.stop_router();
+            ui.with_layout(Layout::right_to_left(), |ui| {
+                if self.running {
+                    if ui.button("Stop").clicked() {
+                        if self.running {
+                            self.stop_router();
+                        }
+                    }
+                    if ui.button("Restart").clicked() {
+                        // Reload app configs and VOR config and restart all threads
+                        // Send ShutdownAll
+                        // Reload configs
+                        // Start router thread
+                        if self.running {
+                            self.stop_router();
+                            let (router_config, app_configs) = config_construct();
+                            self.vor_router_config = router_config;
+                            self.configs = app_configs;
+                            self.start_router();
+                        }
+                    }
+                } else {
+                    if ui.button(RichText::new("Start").color(Color32::GREEN)).clicked() {
+                        if !self.running {
+                            self.start_router();
+                        }
+                    }
                 }
-                if ui.button("Restart").clicked() {
-                    // Reload app configs and VOR config and restart all threads
-                    // Send ShutdownAll
-                    // Reload configs
-                    // Start router thread
-                    self.stop_router();
-                    let (router_config, app_configs) = config_construct();
-                    self.vor_router_config = router_config;
-                    self.configs = app_configs;
-                    self.start_router();
-
-                }
-            } else {
-                if ui.button("Start").clicked() {
-
-                    self.start_router();
-                }
-            }
+            });
             ui.separator();
         });
     }
@@ -152,11 +234,16 @@ impl VORGUI {
             // router thread recv msgs from GUI thread and controls child threads each with their own channel to comm with router thread
         // Generate / Start OSC threads here
         let confs: Vec<VORConfig> = self.configs.iter().map(|c| c.0.config_data.clone()).collect();
+
         let (router_tx, router_rx): (Sender<RouterMsg>, Receiver<RouterMsg>) = mpsc::channel();
+        let (app_stat_tx, app_stat_rx): (Sender<VORAppIdentifier>, Receiver<VORAppIdentifier>) = mpsc::channel();
         self.router_channel = Some(router_tx);
+        self.router_msg_recvr = Some(app_stat_rx);
+
         let bind_target = format!("{}:{}", self.vor_router_config.bind_host, self.vor_router_config.bind_port);
+
         thread::spawn(move || {
-            route_main(bind_target, router_rx, confs);
+            route_main(bind_target, router_rx, app_stat_tx, confs);
         });
 
         self.running = true;
@@ -165,6 +252,7 @@ impl VORGUI {
     fn stop_router(&mut self) {
         // Send shutdown signal to OSC threads here
         self.router_channel.take().unwrap().send(RouterMsg::ShutdownAll).unwrap();
+        //self.router_msg_recvr = None;
         self.running = false;
     }
 
@@ -195,15 +283,15 @@ impl VORGUI {
                     }
                     ui.horizontal(|ui| {
                         ui.with_layout(Layout::right_to_left(), |ui| {
-                            if ui.button("Cancel").clicked() {
+                            if ui.button(RichText::new("Cancel").color(Color32::RED)).clicked() {
                                 self.new_app = None;
                                 self.adding_new_app = false;
                                 self.new_app_cf_exists_err = false;
                             }
-                            if ui.button("Add").clicked() {
+                            if ui.button(RichText::new("Add").color(Color32::GREEN)).clicked() {
                                 self.new_app.as_mut().unwrap().config_path = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs\\{}.json", get_user_home_dir(), self.new_app.as_ref().unwrap().config_data.app_name);
                                 if !file_exists(&self.new_app.as_ref().unwrap().config_path) {
-                                    self.configs.push((self.new_app.take().unwrap(), false));
+                                    self.configs.push((self.new_app.take().unwrap(), VORAppStatus::Stopped, false));
                                     self.save_app_config(self.configs.len()-1);
                                     self.adding_new_app = false;
                                     self.new_app_cf_exists_err = false;
@@ -222,7 +310,7 @@ impl VORGUI {
                 ui.horizontal(|ui| {
                     ui.label("Add new VOR app");
                     ui.with_layout(Layout::right_to_left(), |ui| {
-                        if ui.button("New").clicked() {
+                        if ui.button(RichText::new("New").color(Color32::GREEN)).clicked() {
                             self.new_app = Some(VORConfigWrapper {
                                 config_path: String::new(),
                                 config_data: VORConfig {
@@ -267,7 +355,7 @@ impl VORGUI {
         for i in 0..self.configs.len() {
         
             ui.group(|ui| {
-                if self.configs[i].1 {
+                if self.configs[i].2 {
                     ui.label("App Name");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_name));
                     ui.label("App Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_host));
                     ui.label("App Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_port));
@@ -276,10 +364,10 @@ impl VORGUI {
 
                     ui.horizontal(|ui| {
                         ui.with_layout(Layout::right_to_left(), |ui| {
-                            if ui.button("Save").clicked() {
+                            if ui.button(RichText::new("Save").color(Color32::GREEN)).clicked() {
                                 // Save config / uncollapse maybe
                                 self.save_app_config(i);
-                                self.configs[i].1 = false;// Being edited
+                                self.configs[i].2 = false;// Being edited
                             }
                         });
 
@@ -291,12 +379,12 @@ impl VORGUI {
                         ui.label(self.configs[i].0.config_data.app_name.as_str());
 
                         ui.with_layout(Layout::right_to_left(), |ui| {
-                            if ui.button("Delete").clicked() {
+                            if ui.button(RichText::new("Delete").color(Color32::RED)).clicked() {
                                 fs::remove_file(&self.configs[i].0.config_path).unwrap();
                                 self.configs.remove(i);
                             }
-                            if ui.button("Edit").clicked() {
-                                self.configs[i].1 = true;// Being edited
+                            if ui.button(RichText::new("Edit").color(Color32::GOLD)).clicked() {
+                                self.configs[i].2 = true;// Being edited
                             }
                         });
                     });
@@ -324,27 +412,26 @@ impl App for VORGUI {
             //ui.separator();
 
             if self.tab == 0 {
-                ui.group(|ui| {
-                    ui.add(egui::Label::new("VOR Main"));
-                    ui.separator();
-                    self.router_exec_button(ui);
-                });
+                
+                ui.add(egui::Label::new("VOR Main"));
+                ui.separator();
+                self.status(ui);
+                self.router_exec_button(ui);
+                
             } else if self.tab == 1 {
-                ui.group(|ui| {
-                    ui.add(egui::Label::new("VOR App Configs"));
-                    ui.separator();
-                    ScrollArea::new([false, true]).show(ui, |ui| {
-                        self.list_app_configs(ui);
-                        self.add_app(ui);
-                    });
+
+                ui.add(egui::Label::new("VOR App Configs"));
+                ui.separator();
+                ScrollArea::new([false, true]).show(ui, |ui| {
+                    self.list_app_configs(ui);
+                    self.add_app(ui);
+                    ui.add_space(40.);
                 });
             } else if self.tab == 2 {
-                ui.group(|ui| {
-                    ui.add(egui::Label::new("VOR Config"));
-                    ui.separator();
-                    self.list_vor_config(ui);
+                ui.add(egui::Label::new("VOR Config"));
+                ui.separator();
+                self.list_vor_config(ui);
 
-                });
             }
         });
         self.gui_footer(&ctx);
@@ -451,7 +538,7 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>) {
     (router_config, configs)
 }
 
-fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, bool)>) {
+fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, VORAppStatus, bool)>) {
     let (vor_router_config, configs) = read_configs();
     if configs.len() < 1 {
         println!("[?] Please put OSC application VOR configs in the [\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs] directory.");
@@ -463,7 +550,7 @@ fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, bool)>) {
 
     let mut gconfs = vec![];
     for c in configs {
-        gconfs.push((c, false));
+        gconfs.push((c, VORAppStatus::Stopped, false));
     }
     return (vor_router_config, gconfs);
 }
@@ -486,6 +573,7 @@ fn main() {
                 adding_new_app: false,
                 new_app: None,
                 new_app_cf_exists_err: false,
+                router_msg_recvr: None,
     }), native_opts);
 
     /*
@@ -495,24 +583,35 @@ fn main() {
     */
 }
 
-fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, configs: Vec<VORConfig>) {
+fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_stat_tx: Sender<VORAppIdentifier>, configs: Vec<VORConfig>) {
 
     let vrc_sock = UdpSocket::bind(router_bind_target).unwrap();
     vrc_sock.set_nonblocking(true).unwrap();
+
     let mut app_channel_vector: Vec<Sender<Vec<u8>>> = Vec::new();
     let mut artc = Vec::new();
+    let mut indexer = 0;
+
     for app in configs {
+
         let (router_tx, router_rx) = mpsc::channel();
         artc.push(router_tx);
+
         let (app_r_tx, app_r_rx) = mpsc::channel();
         app_channel_vector.push(app_r_tx);
+        // App struct Identifier struct
+
+        let app_stat_tx_at = app_stat_tx.clone();
+
         thread::spawn(move || {
-            route_app(app_r_rx, router_rx, app);
+            route_app(app_r_rx, router_rx, app_stat_tx_at, indexer, app);
         });
+        indexer += 1;
     }
 
+    /*// Using Asynchronous queue for msging no need to wait
     println!("[*] Wait 3 seconds for listener channels..");
-    thread::sleep(Duration::from_secs(3));
+    thread::sleep(Duration::from_secs(3));*/
 
     let (osc_parse_tx, osc_parse_rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
     thread::spawn(move || {parse_vrc_osc(app_channel_vector, osc_parse_rx, vrc_sock);});
@@ -525,11 +624,12 @@ fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, config
                 // Send shutdown to all threads
 
                 // Shutdown osc parse thread first
-                osc_parse_tx.send(true);
+                osc_parse_tx.send(true).unwrap();
                 println!("[*] Shutdown signal: OSC receive thread");
+
                 // Shutdown app route threads second
                 for app_route_thread_channel in artc {
-                    app_route_thread_channel.send(true);
+                    let _ = app_route_thread_channel.send(true);
                 }
                 println!("[*] Shutdown signal: Route threads");
 
@@ -537,40 +637,35 @@ fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, config
                 println!("[*] Shutdown signal: Router thread");
                 return;// Shutdown router thread.
             },
-            _ =>{},
+            //_ =>{},
         }
     }
 }
 
 fn parse_vrc_osc(tx: Vec<Sender<Vec<u8>>>, router_rx: Receiver<bool>, vrc_sock: UdpSocket) {
     let mut buf = [0u8; MTU];
-    //vrc_sock.set_nonblocking(true).unwrap();
+    vrc_sock.set_nonblocking(true).unwrap();
     loop {
         
         match vrc_sock.recv_from(&mut buf) {
             Ok((br, _a)) => {
 
-                match router_rx.try_recv() {
-                    Ok(sig) => {
-                        if sig {
-                            return;
-                        }
-                    },
-                    Err(_) => {},
-                }
-
-                if br <= 0 {
+                if br <= 0 {// If got bytes send them to routers otherwise restart loop
                     continue;
                 } else {
-                    /* Filtering
-                    match rosc::decoder::decode(&mut buf) {
-                        Ok(pkt) => { if let OscPacket::Message(msg) = pkt { tx.send(pkt); }},
-                        Err(_e) => continue,
-                    }
-                    */
         
                     for s in &tx {
                         s.send(buf.to_vec()).unwrap_or_else(|_| {println!("[-] No rx listening.")});
+                    }
+
+                    match router_rx.try_recv() {
+                        Ok(sig) => {
+                            if sig {
+                                println!("[!] VRC OSC thread shutdown");
+                                return;
+                            }
+                        },
+                        Err(_) => {},
                     }
                 }
             },
@@ -578,32 +673,66 @@ fn parse_vrc_osc(tx: Vec<Sender<Vec<u8>>>, router_rx: Receiver<bool>, vrc_sock: 
                 match router_rx.try_recv() {
                     Ok(sig) => {
                         if sig {
+                            println!("[!] VRC OSC thread shutdown");
                             return;
                         }
                     },
                     Err(_) => {},
                 }
             },
+        }// vrc recv sock
+    }// loop
+}
+
+fn route_app(rx: Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: Sender<VORAppIdentifier>, ai: u64, app: VORConfig) {
+    let rhp = format!("{}:{}", app.app_host, app.app_port);
+    let lhp = format!("{}:{}", app.bind_host, app.bind_port);
+    let sock = match UdpSocket::bind(lhp) {
+        Ok(s) => s,
+        Err(_e) => {
+            let _ = app_stat_tx_at.send(app_error(ai, -1, format!("Failed to bind UdpSocket: {}", _e)));
+            return;// Close app route thread because app failed to bind
+        }
+    };
+    println!("[*] OSC App: [{}] Route Initialized..", app.app_name);
+    let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Running });
+    loop {
+        match router_rx.try_recv() {
+            Ok(signal) => {
+                println!("[!] signal: {}", signal);
+                if signal {
+                    let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Stopped });
+                    println!("[!] Send Stopped status");
+                    return;
+                }
+            },
+            _ => {/*println!("[!] Try recv errors")*/},
+        }
+
+        // Get vrc OSC buffer
+        let buffer = match rx.recv() {
+            Ok(b) => b,
+            Err(_e) => {
+                //println!("[OSC BUFFER RECV FAIL");
+                // VRC OSC BUFFER CHANNEL DIED SO KILL ROUTE THREAD
+                let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Stopped });
+                return
+            }// This channel errors during shutdown bc becomes discon
         };
+
+        // Route buffer
+        match sock.send_to(&buffer, &rhp) {
+            Ok(_bs) => {},
+            Err(_e) => {
+                let _ = app_stat_tx_at.send(app_error(ai, -2, format!("Failed to send VRC OSC buffer to app: {}", _e)));
+            }
+        }
     }
 }
 
-fn route_app(rx: Receiver<Vec<u8>>, router_rx: Receiver<bool>, app: VORConfig) {
-    let rhp = format!("{}:{}", app.app_host, app.app_port);
-    let lhp = format!("{}:{}", app.bind_host, app.bind_port);
-    let sock = UdpSocket::bind(lhp).unwrap();
-    println!("[*] OSC App: [{}] Route Initialized..", app.app_name);
-    loop {
-        match router_rx.try_recv() {
-            Ok(signal) => {if signal {return;}},
-            _ => {},
-        }
-
-        // This channel errors during shutdown bc becomes discon
-        let buffer = match rx.recv() {
-            Ok(b) => b,
-            Err(_e) => {return;},
-        };
-        sock.send_to(&buffer, &rhp).unwrap();
+fn app_error(ai: u64, err_id: i32, msg: String) -> VORAppIdentifier {
+    VORAppIdentifier {
+        index: ai,
+        status: VORAppStatus::AppError(VORAppError{id: err_id, msg}),
     }
 }
