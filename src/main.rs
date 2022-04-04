@@ -76,7 +76,7 @@ impl fmt::Display for VORAppStatus {
 }
 
 struct VORAppIdentifier {
-    index: u64,
+    index: i64,
     status: VORAppStatus,
 }
 
@@ -94,7 +94,7 @@ struct VORGUI {
 
 impl VORGUI {
     fn set_tab(&mut self, ctx: &Context) {
-        //ui.horizontal(|ui| {
+
         TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.with_layout(Layout::left_to_right(), |ui| {
@@ -147,11 +147,11 @@ impl VORGUI {
             ui.separator();
             if self.running {
                 ui.horizontal(|ui| {
-                    ui.label("Status: ");ui.label(RichText::new("routing").color(Color32::GREEN));
+                    ui.label("Status: ");ui.label(RichText::new("Routing").color(Color32::GREEN));
                 });
             } else {
                 ui.horizontal(|ui| {
-                    ui.label("Status: ");ui.label(RichText::new("stopped").color(Color32::RED));
+                    ui.label("Status: ");ui.label(RichText::new("Stopped").color(Color32::RED));
                 });
             }
         });
@@ -379,12 +379,16 @@ impl VORGUI {
                         ui.label(self.configs[i].0.config_data.app_name.as_str());
 
                         ui.with_layout(Layout::right_to_left(), |ui| {
-                            if ui.button(RichText::new("Delete").color(Color32::RED)).clicked() {
-                                fs::remove_file(&self.configs[i].0.config_path).unwrap();
-                                self.configs.remove(i);
-                            }
-                            if ui.button(RichText::new("Edit").color(Color32::GOLD)).clicked() {
-                                self.configs[i].2 = true;// Being edited
+                            if !self.running {
+                                if ui.button(RichText::new("Delete").color(Color32::RED)).clicked() {
+                                    fs::remove_file(&self.configs[i].0.config_path).unwrap();
+                                    self.configs.remove(i);
+                                }
+                                if ui.button(RichText::new("Edit").color(Color32::GOLD)).clicked() {
+                                    self.configs[i].2 = true;// Being edited
+                                }
+                            } else {
+                                ui.colored_label(Color32::RED, "Locked");
                             }
                         });
                     });
@@ -585,7 +589,13 @@ fn main() {
 
 fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_stat_tx: Sender<VORAppIdentifier>, configs: Vec<VORConfig>) {
 
-    let vrc_sock = UdpSocket::bind(router_bind_target).unwrap();
+    let vrc_sock = match UdpSocket::bind(router_bind_target) {
+        Ok(s) => s,
+        Err(_e) => {
+            let _ = app_stat_tx.send(app_error(-1, -1, "Failed to bind VOR socket.".to_string()));
+            return;
+        }
+    };
     vrc_sock.set_nonblocking(true).unwrap();
 
     let mut app_channel_vector: Vec<Sender<Vec<u8>>> = Vec::new();
@@ -646,7 +656,7 @@ fn parse_vrc_osc(tx: Vec<Sender<Vec<u8>>>, router_rx: Receiver<bool>, vrc_sock: 
     let mut buf = [0u8; MTU];
     vrc_sock.set_nonblocking(true).unwrap();
     loop {
-        
+
         match vrc_sock.recv_from(&mut buf) {
             Ok((br, _a)) => {
 
@@ -684,13 +694,13 @@ fn parse_vrc_osc(tx: Vec<Sender<Vec<u8>>>, router_rx: Receiver<bool>, vrc_sock: 
     }// loop
 }
 
-fn route_app(rx: Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: Sender<VORAppIdentifier>, ai: u64, app: VORConfig) {
+fn route_app(rx: Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: Sender<VORAppIdentifier>, ai: i64, app: VORConfig) {
     let rhp = format!("{}:{}", app.app_host, app.app_port);
     let lhp = format!("{}:{}", app.bind_host, app.bind_port);
     let sock = match UdpSocket::bind(lhp) {
         Ok(s) => s,
         Err(_e) => {
-            let _ = app_stat_tx_at.send(app_error(ai, -1, format!("Failed to bind UdpSocket: {}", _e)));
+            let _ = app_stat_tx_at.send(app_error(ai, -2, format!("Failed to bind app UdpSocket: {}", _e)));
             return;// Close app route thread because app failed to bind
         }
     };
@@ -699,7 +709,7 @@ fn route_app(rx: Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: S
     loop {
         match router_rx.try_recv() {
             Ok(signal) => {
-                println!("[!] signal: {}", signal);
+                //println!("[!] signal: {}", signal);
                 if signal {
                     let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Stopped });
                     println!("[!] Send Stopped status");
@@ -724,13 +734,13 @@ fn route_app(rx: Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: S
         match sock.send_to(&buffer, &rhp) {
             Ok(_bs) => {},
             Err(_e) => {
-                let _ = app_stat_tx_at.send(app_error(ai, -2, format!("Failed to send VRC OSC buffer to app: {}", _e)));
+                let _ = app_stat_tx_at.send(app_error(ai, -3, format!("Failed to send VRC OSC buffer to app: {}", _e)));
             }
         }
     }
 }
 
-fn app_error(ai: u64, err_id: i32, msg: String) -> VORAppIdentifier {
+fn app_error(ai: i64, err_id: i32, msg: String) -> VORAppIdentifier {
     VORAppIdentifier {
         index: ai,
         status: VORAppStatus::AppError(VORAppError{id: err_id, msg}),
