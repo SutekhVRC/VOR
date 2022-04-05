@@ -1,13 +1,16 @@
-//#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
-use eframe::egui::{Vec2, ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Button};
+use eframe::egui::{Vec2, ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Button, Label};
 use eframe::epaint::Color32;
 use rosc::{self};
 use rosc::decoder::MTU;
 use serde_json;
 use serde::{Deserialize, Serialize};
 use directories::BaseDirs;
+use tokio::runtime::Runtime;
+use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::broadcast::{self, Sender as bcst_Sender, Receiver as bcst_Receiver};
 use core::fmt;
 use std::sync::mpsc::{self, Sender, Receiver};
 
@@ -51,8 +54,10 @@ struct RouterConfig {
     bind_port: String,
     vrc_host: String,
     vrc_port: String,
+    vor_buffer_size: String,
 }
 
+/*
 struct RouterError {
     id: i64,
     msg: String,
@@ -62,7 +67,7 @@ struct RouterStatus {
     vrc_osc_recv: bool,
     
 }
-
+*/
 struct VORAppError {
     id: i32,
     msg: String,
@@ -100,6 +105,7 @@ struct VORGUI {
     new_app: Option<VORConfigWrapper>,
     new_app_cf_exists_err: bool,
     router_msg_recvr: Option<Receiver<VORAppIdentifier>>,
+    //vor_status: RouterStatus,
 }
 
 impl VORGUI {
@@ -185,7 +191,7 @@ impl VORGUI {
                     ui.horizontal(|ui| {
                         ui.group(|ui| {
                             ui.label(format!("{}: ", self.configs[i].0.config_data.app_name));
-                            ui.label(RichText::new(format!("{}", self.configs[i].1)).color(status_color));
+                            ui.add(Label::new(RichText::new(format!("{}", self.configs[i].1)).color(status_color)).wrap(true));
                         });
                     });
                 }
@@ -199,6 +205,8 @@ impl VORGUI {
         ui.label("Bind Port: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.bind_port));
         ui.label("VRChat Host: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vrc_host));
         ui.label("VRChat Port: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vrc_port));
+        ui.label("VOR Buffer Size: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vor_buffer_size));
+
 
         ui.horizontal(|ui| {
             ui.with_layout(Layout::right_to_left(), |ui| {
@@ -260,9 +268,16 @@ impl VORGUI {
         self.router_msg_recvr = Some(app_stat_rx);
 
         let bind_target = format!("{}:{}", self.vor_router_config.bind_host, self.vor_router_config.bind_port);
-
+        let vor_buf_size = match self.vor_router_config.vor_buffer_size.parse::<usize>() {
+            Ok(s) => s,
+            Err(_) => {
+                self.router_channel = None;
+                self.router_msg_recvr = None;
+                return;
+            }
+        };
         thread::spawn(move || {
-            route_main(bind_target, router_rx, app_stat_tx, confs);
+            route_main(bind_target, router_rx, app_stat_tx, confs, vor_buf_size);
         });
 
         self.running = true;
@@ -513,6 +528,7 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>) {
                 bind_port: "9001".to_string(),
                 vrc_host: "127.0.0.1".to_string(),
                 vrc_port: "9000".to_string(),
+                vor_buffer_size: "1024".to_string(),
             }
         ).unwrap()).unwrap();
         println!("[+] Created VOR router config.");
@@ -610,7 +626,7 @@ fn main() {
     */
 }
 
-fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_stat_tx: Sender<VORAppIdentifier>, configs: Vec<VORConfig>) {
+fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_stat_tx: Sender<VORAppIdentifier>, configs: Vec<VORConfig>, vor_queue_size: usize) {
 
     let vrc_sock = match UdpSocket::bind(router_bind_target) {
         Ok(s) => s,
@@ -621,24 +637,24 @@ fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_st
     };
     vrc_sock.set_nonblocking(true).unwrap();
 
-    let mut app_channel_vector: Vec<Sender<Vec<u8>>> = Vec::new();
+    //let mut app_channel_vector: Vec<Sender<Vec<u8>>> = Vec::new();
     let mut artc = Vec::new();
     let mut indexer = 0;
+
+    let async_rt = Runtime::new().unwrap();
+    let (bcst_tx, _bcst_rx) = broadcast::channel(vor_queue_size);
 
     for app in configs {
 
         let (router_tx, router_rx) = mpsc::channel();
         artc.push(router_tx);
 
-        let (app_r_tx, app_r_rx) = mpsc::channel();
-        app_channel_vector.push(app_r_tx);
-        // App struct Identifier struct
+        //let (app_r_tx, app_r_rx) = mpsc::channel();
+        //app_channel_vector.push(app_r_tx);
 
         let app_stat_tx_at = app_stat_tx.clone();
-
-        thread::spawn(move || {
-            route_app(app_r_rx, router_rx, app_stat_tx_at, indexer, app);
-        });
+        let bcst_app_rx = bcst_tx.subscribe();
+        async_rt.spawn(route_app(bcst_app_rx, router_rx, app_stat_tx_at, indexer, app));
         indexer += 1;
     }
 
@@ -647,7 +663,7 @@ fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_st
     thread::sleep(Duration::from_secs(3));*/
 
     let (osc_parse_tx, osc_parse_rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
-    thread::spawn(move || {parse_vrc_osc(app_channel_vector, osc_parse_rx, vrc_sock);});
+    thread::spawn(move || {parse_vrc_osc(bcst_tx, osc_parse_rx, vrc_sock);});
     println!("[+] Started VRChat OSC Router.");
 
     // Listen for GUI events
@@ -665,6 +681,7 @@ fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_st
                     let _ = app_route_thread_channel.send(true);
                 }
                 println!("[*] Shutdown signal: Route threads");
+                //drop(_bcst_rx)
 
                 // Shutdown router thread last
                 println!("[*] Shutdown signal: Router thread");
@@ -675,7 +692,7 @@ fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_st
     }
 }
 
-fn parse_vrc_osc(mut tx: Vec<Sender<Vec<u8>>>, router_rx: Receiver<bool>, vrc_sock: UdpSocket) {
+fn parse_vrc_osc(/*mut tx: Vec<Sender<Vec<u8>>>,*/bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, vrc_sock: UdpSocket) {
     let mut buf = [0u8; MTU];
     vrc_sock.set_nonblocking(true).unwrap();
     loop {
@@ -686,7 +703,10 @@ fn parse_vrc_osc(mut tx: Vec<Sender<Vec<u8>>>, router_rx: Receiver<bool>, vrc_so
                 if br <= 0 {// If got bytes send them to routers otherwise restart loop
                     continue;
                 } else {
-        
+
+                    bcst_tx.send(buf.to_vec()).unwrap();
+
+                    /*
                     for s in 0..tx.len() {
                         match &tx[s].send(buf.to_vec()) {
                             Ok(_) => {},
@@ -695,7 +715,7 @@ fn parse_vrc_osc(mut tx: Vec<Sender<Vec<u8>>>, router_rx: Receiver<bool>, vrc_so
                                 tx.remove(s);
                             }
                         }
-                    }
+                    }*/
 
                     match router_rx.try_recv() {
                         Ok(sig) => {
@@ -723,7 +743,7 @@ fn parse_vrc_osc(mut tx: Vec<Sender<Vec<u8>>>, router_rx: Receiver<bool>, vrc_so
     }// loop
 }
 
-fn route_app(rx: Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: Sender<VORAppIdentifier>, ai: i64, app: VORConfig) {
+async fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: Sender<VORAppIdentifier>, ai: i64, app: VORConfig) {
     let rhp = format!("{}:{}", app.app_host, app.app_port);
     let lhp = format!("{}:{}", app.bind_host, app.bind_port);
     let sock = match UdpSocket::bind(lhp) {
@@ -749,14 +769,15 @@ fn route_app(rx: Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: S
         }
 
         // Get vrc OSC buffer
-        let buffer = match rx.recv() {
+        let buffer = match rx.recv().await {
             Ok(b) => b,
-            Err(_e) => {
+            Err(RecvError::Lagged(_e)) => continue,
+            Err(RecvError::Closed) => {
                 //println!("[OSC BUFFER RECV FAIL");
                 // VRC OSC BUFFER CHANNEL DIED SO KILL ROUTE THREAD
                 let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Stopped });
                 return
-            }// This channel errors during shutdown bc becomes discon
+            }
         };
 
         // Route buffer
