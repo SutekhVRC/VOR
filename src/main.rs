@@ -9,7 +9,7 @@ use serde_json;
 use serde::{Deserialize, Serialize};
 use directories::BaseDirs;
 use tokio::runtime::Runtime;
-use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::broadcast::error::{RecvError, TryRecvError};
 use tokio::sync::broadcast::{self, Sender as bcst_Sender, Receiver as bcst_Receiver};
 use core::fmt;
 use std::sync::mpsc::{self, Sender, Receiver};
@@ -294,7 +294,7 @@ impl VORGUI {
             Ok(s) => s,
             Err(_) => {
                 self.router_channel = None;
-                self.router_msg_recvr = None;
+                //self.router_msg_recvr = None;
                 return;
             }
         };
@@ -770,6 +770,8 @@ async fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, ap
     println!("[*] OSC App: [{}] Route Initialized..", app.app_name);
     let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Running });
     loop {
+        //println!("..");
+        //println!("[R RX]");
         match router_rx.try_recv() {
             Ok(signal) => {
                 //println!("[!] signal: {}", signal);
@@ -781,19 +783,23 @@ async fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, ap
             },
             _ => {/*println!("[!] Try recv errors")*/},
         }
-
+        //println!("...");
+        //println!("[B RX]");
         // Get vrc OSC buffer
-        let buffer = match rx.recv().await {
+        let buffer = match rx.try_recv() {
             Ok(b) => b,
-            Err(RecvError::Lagged(_e)) => continue,
-            Err(RecvError::Closed) => {
+            Err(TryRecvError::Empty) => continue,
+            Err(TryRecvError::Lagged(_)) => continue,
+            Err(TryRecvError::Closed) => {
                 //println!("[OSC BUFFER RECV FAIL");
                 // VRC OSC BUFFER CHANNEL DIED SO KILL ROUTE THREAD
                 let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Stopped });
-                return
+                //println!("BONKED1");
+                return;
             }
         };
-
+        //println!(".....");
+        //println!("[B UDPS]");
         // Route buffer
         match sock.send_to(&buffer, &rhp) {
             Ok(_bs) => {},
@@ -801,6 +807,7 @@ async fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, ap
                 let _ = app_stat_tx_at.send(app_error(ai, -3, format!("Failed to send VRC OSC buffer to app: {}", _e)));
             }
         }
+        //println!(".........");
     }
 }
 
