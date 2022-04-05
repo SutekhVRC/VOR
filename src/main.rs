@@ -1,9 +1,9 @@
-#![windows_subsystem = "windows"]
+//#![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
-use eframe::egui::{Vec2, ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Button, Label};
+use eframe::egui::{Vec2, ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Label};
 use eframe::epaint::Color32;
-use rosc::{self};
+use rosc;
 use rosc::decoder::MTU;
 use serde_json;
 use serde::{Deserialize, Serialize};
@@ -95,10 +95,17 @@ struct VORAppIdentifier {
     status: VORAppStatus,
 }
 
+enum VORGUITab {
+    Main,
+    Apps,
+    Config,
+    Firewall,
+}
+
 struct VORGUI {
     configs: Vec<(VORConfigWrapper, VORAppStatus, bool)>,
     running: bool,
-    tab: u8,
+    tab: VORGUITab,
     router_channel: Option<Sender<RouterMsg>>,
     vor_router_config: RouterConfig,
     adding_new_app: bool,
@@ -114,25 +121,38 @@ impl VORGUI {
         TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.with_layout(Layout::left_to_right(), |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button(RichText::new("Main").monospace()).clicked() {
+                            self.tab = VORGUITab::Main;
+                        }
+                        ui.separator();
+    
+    
+                        if ui.button(RichText::new("Apps").monospace()).clicked() {
+                            self.tab = VORGUITab::Apps;
+                        }
+    
+                        ui.separator();
+    
+                        
+                        if ui.button(RichText::new("Firewall").monospace()).clicked() {
+                            self.tab = VORGUITab::Firewall;
+                        }
+                        ui.separator();
+    
+                        if ui.button(RichText::new("Config").monospace()).clicked() {
+                            self.tab = VORGUITab::Config;
+                        }
 
-                    if ui.button(RichText::new("Main").monospace()).clicked() {
-                        self.tab = 0;
-                    }
+                        ui.separator();
+                        if self.running {
+                            ui.label(RichText::new("Routing").color(Color32::GREEN));
+                        } else {
+                            ui.label(RichText::new("Stopped").color(Color32::RED));
+                        }
+                        //ui.separator();
+                    });
                     ui.separator();
-
-
-                    if ui.button(RichText::new("VOR Apps").monospace()).clicked() {
-                        self.tab = 1;
-                    }
-
-                    ui.separator();
-
-
-                    if ui.button(RichText::new("VOR Config").monospace()).clicked() {
-                        self.tab = 2;
-                    }
-
-
                 });
             });
         });
@@ -450,30 +470,31 @@ impl App for VORGUI {
 
             self.gui_header(ui);
 
-            //self.set_tab(&ctx);
-            //ui.separator();
-
-            if self.tab == 0 {
-                
-                ui.add(egui::Label::new("VOR Main"));
-                ui.separator();
-                self.status(ui);
-                self.router_exec_button(ui);
-                
-            } else if self.tab == 1 {
-
-                ui.add(egui::Label::new("VOR App Configs"));
-                ui.separator();
-                ScrollArea::new([false, true]).show(ui, |ui| {
-                    self.list_app_configs(ui);
-                    self.add_app(ui);
-                    ui.add_space(40.);
-                });
-            } else if self.tab == 2 {
-                ui.add(egui::Label::new("VOR Config"));
-                ui.separator();
-                self.list_vor_config(ui);
-
+            match self.tab {
+                VORGUITab::Main => {
+                    ui.add(egui::Label::new("VOR Main"));
+                    ui.separator();
+                    self.status(ui);
+                    self.router_exec_button(ui);
+                },
+                VORGUITab::Apps => {
+                    ui.add(egui::Label::new("VOR App Configs"));
+                    ui.separator();
+                    ScrollArea::new([false, true]).show(ui, |ui| {
+                        self.list_app_configs(ui);
+                        self.add_app(ui);
+                        ui.add_space(40.);
+                    });
+                },
+                VORGUITab::Firewall => {
+                    ui.add(egui::Label::new("OSC Firewall"));
+                    ui.separator();
+                },
+                VORGUITab::Config => {
+                    ui.add(egui::Label::new("VOR Config"));
+                    ui.separator();
+                    self.list_vor_config(ui);
+                },
             }
         });
         self.gui_footer(&ctx);
@@ -603,14 +624,16 @@ fn main() {
     let (vor_router_config, configs) = config_construct();
 
     let mut native_opts = NativeOptions::default();
-    native_opts.initial_window_size = Some(Vec2::new(350., 400.));
+    native_opts.initial_window_size = Some(Vec2::new(325., 400.));
+    native_opts.max_window_size = Some(Vec2::new(325., 400.));
+    native_opts.min_window_size = Some(Vec2::new(325., 400.));
 
     run_native(
         Box::new(
             VORGUI {
                 configs,
                 running: false,
-                tab: 0,
+                tab: VORGUITab::Main,
                 router_channel: None,
                 vor_router_config,
                 adding_new_app: false,
@@ -657,6 +680,7 @@ fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_st
         async_rt.spawn(route_app(bcst_app_rx, router_rx, app_stat_tx_at, indexer, app));
         indexer += 1;
     }
+    drop(_bcst_rx);// Dont need this rx
 
     /*// Using Asynchronous queue for msging no need to wait
     println!("[*] Wait 3 seconds for listener channels..");
@@ -681,7 +705,6 @@ fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_st
                     let _ = app_route_thread_channel.send(true);
                 }
                 println!("[*] Shutdown signal: Route threads");
-                //drop(_bcst_rx)
 
                 // Shutdown router thread last
                 println!("[*] Shutdown signal: Router thread");
@@ -692,7 +715,7 @@ fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_st
     }
 }
 
-fn parse_vrc_osc(/*mut tx: Vec<Sender<Vec<u8>>>,*/bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, vrc_sock: UdpSocket) {
+fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, vrc_sock: UdpSocket) {
     let mut buf = [0u8; MTU];
     vrc_sock.set_nonblocking(true).unwrap();
     loop {
