@@ -238,7 +238,7 @@ impl VORGUI {
         });
     }
 
-    fn router_exec_button(&mut self, ui: &mut egui::Ui) {
+    fn router_exec_button(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         ui.horizontal(|ui| {
             ui.with_layout(Layout::right_to_left(), |ui| {
                 if self.running {
@@ -246,6 +246,7 @@ impl VORGUI {
                         if ui.button("Stop").clicked() {
                             if self.running {
                                 self.stop_router();
+                                ctx.request_repaint();
                             }
                         }
                         if ui.button("Reload").clicked() {
@@ -267,6 +268,7 @@ impl VORGUI {
                         if ui.button(RichText::new("Start").color(Color32::GREEN)).clicked() {
                             if !self.running {
                                 self.start_router();
+                                ctx.request_repaint();
                             }
                         }
                     });
@@ -466,7 +468,7 @@ impl App for VORGUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &eframe::epi::Frame) {
         self.set_tab(&ctx);
         CentralPanel::default().show(ctx, |ui| {
-            ctx.request_repaint();
+            //ctx.request_repaint();
 
             self.gui_header(ui);
 
@@ -475,7 +477,7 @@ impl App for VORGUI {
                     ui.add(egui::Label::new("VOR Main"));
                     ui.separator();
                     self.status(ui);
-                    self.router_exec_button(ui);
+                    self.router_exec_button(ui, &ctx);
                 },
                 VORGUITab::Apps => {
                     ui.add(egui::Label::new("VOR App Configs"));
@@ -728,17 +730,6 @@ fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, vrc_s
                 } else {
 
                     bcst_tx.send(buf.to_vec()).unwrap();
-
-                    /*
-                    for s in 0..tx.len() {
-                        match &tx[s].send(buf.to_vec()) {
-                            Ok(_) => {},
-                            Err(_e) => {
-                                println!("[-] No rx listening. Destroying Sender..");
-                                tx.remove(s);
-                            }
-                        }
-                    }*/
 
                     match router_rx.try_recv() {
                         Ok(sig) => {
