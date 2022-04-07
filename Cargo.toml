@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["SutekhVRC"]
 
 [dependencies]
-rosc = "0.6.0"
+rosc = "0.7.0"
 serde_json = "1.0.79"
 serde = {version = "1.0.136", features = ["derive"]}
 directories = "4.0.1"

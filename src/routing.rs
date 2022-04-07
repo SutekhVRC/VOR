@@ -161,7 +161,7 @@ pub fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, ap
                 osc_parse_tx.send(true).unwrap();
                 println!("[*] Shutdown signal: OSC receive thread");
 
-                // Shutdown app route threads second
+                // Shutdown app route threads
                 for app_route_thread_channel in artc {
                     let _ = app_route_thread_channel.send(true);
                 }
