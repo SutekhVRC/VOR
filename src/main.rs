@@ -1,7 +1,7 @@
 //#![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
-use eframe::egui::{Vec2, ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Label};
+use eframe::egui::{Vec2, ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Label, CollapsingHeader};
 use eframe::epaint::Color32;
 use rosc;
 use rosc::decoder::MTU;
@@ -17,7 +17,7 @@ use std::sync::mpsc::{self, Sender, Receiver};
 //use std::fmt::format;
 use std::path::Path;
 use std::{fs, thread};
-use std::net::{UdpSocket};
+use std::net::{UdpSocket, Ipv4Addr};
 //use std::time::Duration;
 
 use eframe::{epi::{App}, egui::{self, CentralPanel}, run_native};
@@ -32,6 +32,28 @@ use eframe::{epi::{App}, egui::{self, CentralPanel}, run_native};
 enum RouterMsg {
     ShutdownAll,
     //RestartAll,
+}
+
+#[derive(Clone)]
+enum AppConfigCheck {
+    IV(InputValidation),
+    AC(AppConflicts),
+    SUCCESS,
+}
+
+#[derive(Clone)]
+enum AppConflicts {
+    NONE,
+    CONFLICT((String, String)),
+}
+
+#[derive(Clone)]
+enum InputValidation {
+    AP(bool),
+    AH(bool),
+    BP(bool),
+    BH(bool),
+    CLEAN,
 }
 
 struct VORConfigWrapper {
@@ -90,6 +112,27 @@ impl fmt::Display for VORAppStatus {
     }
 }
 
+impl fmt::Display for AppConflicts {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AppConflicts::CONFLICT((app, con_comp)) => write!(f, "{} -> {}", app, con_comp),
+            AppConflicts::NONE => write!(f, "NONE"),
+        }
+    }
+}
+
+impl fmt::Display for InputValidation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            InputValidation::AH(_b) => write!(f, "App host: Invalid input."),
+            InputValidation::AP(_b) => write!(f, "App port: Invalid input."),
+            InputValidation::BH(_b) => write!(f, "Bind Host: Invalid input."),
+            InputValidation::BP(_b) => write!(f, "Bind Port: Invalid input."),
+            InputValidation::CLEAN => write!(f, "CLEAN"),
+        }
+    }
+}
+
 struct VORAppIdentifier {
     index: i64,
     status: VORAppStatus,
@@ -102,8 +145,15 @@ enum VORGUITab {
     Firewall,
 }
 
+#[derive(Clone)]
+enum AppConfigState {
+    EDIT(AppConfigCheck),
+    SAVED,
+    //SERROR(AppConfigCheck),
+}
+
 struct VORGUI {
-    configs: Vec<(VORConfigWrapper, VORAppStatus, bool)>,
+    configs: Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>,
     running: bool,
     tab: VORGUITab,
     router_channel: Option<Sender<RouterMsg>>,
@@ -113,6 +163,10 @@ struct VORGUI {
     new_app_cf_exists_err: bool,
     router_msg_recvr: Option<Receiver<VORAppIdentifier>>,
     //vor_status: RouterStatus,
+    // SOME KIND OF SAVE STATE FOR SAVE ERRORS save state replace edit bool? an enum: AppState edit/saved/saveerror
+    // DOUBLE CHECK IV&AC BC U WROTE IT DELIRIOUSLY
+    // CHECK AC IP STOOF BC LOL
+
 }
 
 impl VORGUI {
@@ -173,7 +227,6 @@ impl VORGUI {
 
     fn status(&mut self, ui: &mut egui::Ui) {
 
-        
         //update vor status
         self.status_refresh();
 
@@ -206,7 +259,7 @@ impl VORGUI {
                     match self.configs[i].1 {
                         VORAppStatus::Running => {},
                         VORAppStatus::Stopped => {status_color = Color32::RED},
-                        VORAppStatus::AppError(_) => {status_color = Color32::GOLD}
+                        VORAppStatus::AppError(_) => {status_color = Color32::GOLD},
                     }
                     ui.horizontal(|ui| {
                         ui.group(|ui| {
@@ -227,22 +280,13 @@ impl VORGUI {
         ui.label("VRChat Port: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vrc_port));
         ui.label("VOR Buffer Size: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vor_buffer_size));
 
-
-        ui.horizontal(|ui| {
-            ui.with_layout(Layout::right_to_left(), |ui| {
-                if ui.button(RichText::new("Save").color(Color32::GREEN)).clicked() {
-                    self.save_vor_config();
-                }
-            });
-
-        });
     }
 
     fn router_exec_button(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         ui.horizontal(|ui| {
             ui.with_layout(Layout::right_to_left(), |ui| {
                 if self.running {
-                    ui.group(|ui| {
+                    //ui.group(|ui| {
                         if ui.button("Stop").clicked() {
                             if self.running {
                                 self.stop_router();
@@ -262,16 +306,17 @@ impl VORGUI {
                                 self.start_router();
                             }
                         }
-                    });
+                    //});
                 } else {
-                    ui.group(|ui| {
+                    //ui.group(|ui| {
                         if ui.button(RichText::new("Start").color(Color32::GREEN)).clicked() {
+                            
                             if !self.running {
                                 self.start_router();
                                 ctx.request_repaint();
                             }
                         }
-                    });
+                    //});
                 }
             });
             ui.separator();
@@ -316,10 +361,87 @@ impl VORGUI {
         fs::write(format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORConfig.json", get_user_home_dir()), serde_json::to_string(&self.vor_router_config).unwrap()).unwrap();
     }
 
-    fn save_app_config(&mut self, app_index: usize) {
+    fn save_app_config(&mut self, app_index: usize) -> AppConfigCheck {
+
+        //println!("[+] SAVING");
+        match self.check_app_inputs(app_index) {
+            InputValidation::CLEAN => {},
+            InputValidation::AH(s) => {
+                return AppConfigCheck::IV(InputValidation::AH(s));
+            },
+            InputValidation::AP(s) => {
+                return AppConfigCheck::IV(InputValidation::AP(s));
+            },
+            InputValidation::BH(s) => {
+                return AppConfigCheck::IV(InputValidation::BH(s));
+            },
+            InputValidation::BP(s) => {
+                return AppConfigCheck::IV(InputValidation::BP(s));
+            },
+        }
+        //println!("[+] INPUTS GOOG");
+        match self.check_app_conflicts(app_index) {
+            AppConflicts::NONE => {},
+            AppConflicts::CONFLICT((app, con_component)) => {
+                return AppConfigCheck::AC(AppConflicts::CONFLICT((app, con_component)));
+            }
+        }
+
         let _ = fs::remove_file(&self.configs[app_index].0.config_path);
         self.configs[app_index].0.config_path = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VorAppConfigs\\{}.json", get_user_home_dir(), self.configs[app_index].0.config_data.app_name);
         fs::write(&self.configs[app_index].0.config_path, serde_json::to_string(&self.configs[app_index].0.config_data).unwrap()).unwrap();
+        //println!("[+] SAVE SUCCESS");
+        return AppConfigCheck::SUCCESS;
+    }
+
+    fn check_app_conflicts(&mut self, app_index: usize) -> AppConflicts {
+
+        for i in 0..self.configs.len() {
+            if i != app_index {
+                
+                if self.configs[i].0.config_data.app_name == self.configs[app_index].0.config_data.app_name {
+                    return AppConflicts::CONFLICT((self.configs[i].0.config_data.app_name.clone(), "App Name".to_string()))
+                }
+                /*
+                if self.configs[i].0.config_data.bind_host == self.configs[app_index].0.config_data.bind_host {
+                    return AppConflicts::CONFLICT((self.configs[app_index].0.config_data.app_name.clone(), "Bind Host".to_string()))
+                }*/
+                if self.configs[i].0.config_data.bind_port == self.configs[app_index].0.config_data.bind_port {
+                    return AppConflicts::CONFLICT((self.configs[i].0.config_data.app_name.clone(), "Bind Port".to_string()))
+                }
+                /*
+                if self.configs[i].0.config_data.app_host == self.configs[app_index].0.config_data.app_host {
+                    return AppConflicts::CONFLICT((self.configs[app_index].0.config_data.app_name.clone(), "App Host".to_string()))
+                }*/
+                /*
+                if self.configs[i].0.config_data.app_port == self.configs[app_index].0.config_data.app_port {
+                    return AppConflicts::CONFLICT((self.configs[i].0.config_data.app_name.clone(), "App Port".to_string()))
+                }
+                */
+            }
+        }
+        return AppConflicts::NONE;
+    }
+
+    fn check_app_inputs(&mut self, app_index: usize) -> InputValidation {
+        
+        if !check_valid_ipv4(&self.configs[app_index].0.config_data.app_host) {
+            return InputValidation::AH(false);
+        }
+        
+        if !check_valid_ipv4(&self.configs[app_index].0.config_data.bind_host) {
+            return InputValidation::BH(false);
+        }
+        
+        if !check_valid_port(&self.configs[app_index].0.config_data.app_port) {
+            return InputValidation::AP(false);
+        }
+        
+        if !check_valid_port(&self.configs[app_index].0.config_data.bind_port) {
+            return InputValidation::BP(false);
+        }
+
+        return InputValidation::CLEAN;
     }
 
     fn add_app(&mut self, ui: &mut egui::Ui) {
@@ -334,8 +456,9 @@ impl VORGUI {
                 ui.label("Bind Host");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_host));
                 ui.label("Bind Port");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_port));
 
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if self.new_app_cf_exists_err {
+                        
                         ui.colored_label(Color32::RED, "App config name already being used.. Choose different app name.");
                         ui.separator();
                     }
@@ -346,17 +469,16 @@ impl VORGUI {
                                 self.adding_new_app = false;
                                 self.new_app_cf_exists_err = false;
                             }
-                            if ui.button(RichText::new("Add").color(Color32::GREEN)).clicked() {
+                            if ui.button(RichText::new("Add")).clicked() {
                                 self.new_app.as_mut().unwrap().config_path = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs\\{}.json", get_user_home_dir(), self.new_app.as_ref().unwrap().config_data.app_name);
                                 if !file_exists(&self.new_app.as_ref().unwrap().config_path) {
-                                    self.configs.push((self.new_app.take().unwrap(), VORAppStatus::Stopped, false));
+                                    self.configs.push((self.new_app.take().unwrap(), VORAppStatus::Stopped, AppConfigState::SAVED));
                                     self.save_app_config(self.configs.len()-1);
                                     self.adding_new_app = false;
                                     self.new_app_cf_exists_err = false;
                                 } else {
                                     self.new_app_cf_exists_err = true;
                                 }
-                                
                             }
                         });
                     });
@@ -368,7 +490,7 @@ impl VORGUI {
                 ui.horizontal(|ui| {
                     ui.label("Add new VOR app");
                     ui.with_layout(Layout::right_to_left(), |ui| {
-                        if ui.button(RichText::new("New").color(Color32::GREEN)).clicked() {
+                        if ui.button(RichText::new("+").color(Color32::GREEN).monospace()).clicked() {
                             self.new_app = Some(VORConfigWrapper {
                                 config_path: String::new(),
                                 config_data: VORConfig {
@@ -402,6 +524,7 @@ impl VORGUI {
             ui.vertical_centered(|ui| {
                 ui.add_space(5.0);
                 ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
+                ui.label("0.0.7-alpha");
                 ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
                 ui.add_space(5.0);
             });
@@ -409,49 +532,94 @@ impl VORGUI {
     }
 
     fn list_app_configs(&mut self, ui: &mut egui::Ui) {
-        
-        for i in 0..self.configs.len() {
-        
+        let conf_count = self.configs.len();
+        for i in 0..conf_count {
+            //println!("[+] Config Length: {}", self.configs.len());
+            let check;
+            if conf_count == self.configs.len() {
+                check = self.configs[i].2.clone();
+            } else {
+                break;
+            }
             ui.group(|ui| {
-                if self.configs[i].2 {
-                    ui.label("App Name");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_name));
-                    ui.label("App Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_host));
-                    ui.label("App Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_port));
-                    ui.label("Bind Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_host));
-                    ui.label("Bind Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_port));
+                match check {
 
-                    ui.horizontal(|ui| {
-                        ui.with_layout(Layout::right_to_left(), |ui| {
-                            ui.group(|ui| {
-                                if ui.button(RichText::new("Save").color(Color32::GREEN)).clicked() {
-                                    // Save config / uncollapse maybe
-                                    self.save_app_config(i);
-                                    self.configs[i].2 = false;// Being edited
-                                }
+                    AppConfigState::EDIT(ref chk) => {
+                        ui.label("App Name");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_name));
+                        ui.label("App Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_host));
+                        ui.label("App Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_port));
+                        ui.label("Bind Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_host));
+                        ui.label("Bind Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_port));
+                        match chk {
+                            AppConfigCheck::AC(c) => {
+                                ui.horizontal(|ui| {
+                                    ui.group(|ui| {
+                                        ui.colored_label(Color32::RED, format!("App conflict: {}", c));
+                                        /*
+                                        ui.label(format!("{}: ", self.configs[i].0.config_data.app_name));
+                                        ui.add(Label::new(RichText::new(format!("{}", c)).color(Color32::GOLD)).wrap(true));*/
+                                    });
+                                });
+                            },
+                            AppConfigCheck::IV(iv) => {
+                                ui.horizontal(|ui| {
+                                    ui.group(|ui| {
+                                        ui.colored_label(Color32::RED, format!("App invalid input: {}", iv));
+                                        /*
+                                        ui.label(format!("{}: ", self.configs[i].0.config_data.app_name));
+                                        ui.add(Label::new(RichText::new(format!("{}", iv)).color(Color32::GOLD)).wrap(true));*/
+                                    });
+                                });
+                            },
+                            AppConfigCheck::SUCCESS => {},// No previous error
+                        }
+
+                        ui.horizontal(|ui| {
+                            ui.with_layout(Layout::right_to_left(), |ui| {
+                                ui.group(|ui| {
+                                    if ui.button(RichText::new("Save")).clicked() {
+                                        // Save config / Input val / Val collision
+                                        match self.save_app_config(i) {
+                                            AppConfigCheck::SUCCESS => {
+                                                self.configs[i].2 = AppConfigState::SAVED;// Not being edited
+                                            },
+                                            AppConfigCheck::AC(ac) => {
+                                                // Conflicting input errors
+                                                //ui.colored_label(Color32::GOLD, format!("App conflict: {}", ac));
+                                                self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::AC(ac));
+                                            },
+                                            AppConfigCheck::IV(iv) => {
+                                                // Input invalid
+                                                //ui.colored_label(Color32::GOLD, format!("App invalid input: {}", iv));
+                                                self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::IV(iv));
+                                            },
+                                        }
+                                    }
+                                });
                             });
                         });
-
-                    });
-
-
-                } else {
-                    ui.horizontal(|ui| {
-                        ui.label(self.configs[i].0.config_data.app_name.as_str());
-
-                        ui.with_layout(Layout::right_to_left(), |ui| {
-                            if !self.running {
-                                if ui.button(RichText::new("Delete").color(Color32::RED)).clicked() {
-                                    fs::remove_file(&self.configs[i].0.config_path).unwrap();
-                                    self.configs.remove(i);
-                                }
-                                if ui.button(RichText::new("Edit").color(Color32::GOLD)).clicked() {
-                                    self.configs[i].2 = true;// Being edited
-                                }
-                            } else {
-                                ui.colored_label(Color32::RED, "Locked");
-                            }
-                        });
-                    });
+                    },
+                    AppConfigState::SAVED => {
+                        
+                            
+                                ui.horizontal(|ui| {
+                                    ui.label(self.configs[i].0.config_data.app_name.as_str());
+            
+                                    ui.with_layout(Layout::right_to_left(), |ui| {
+                                        if !self.running {
+                                            if ui.button(RichText::new("-").color(Color32::RED).monospace()).clicked() {
+                                                fs::remove_file(&self.configs[i].0.config_path).unwrap();
+                                                self.configs.remove(i);
+                                            }
+                                            if ui.button(RichText::new("Edit")).clicked() {
+                                                self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::SUCCESS);// Being edited
+                                            }
+                                        } else {
+                                            ui.colored_label(Color32::RED, "Locked");
+                                        }
+                                    });
+                                });
+                    },
                 }
             });
         }// For list
@@ -474,10 +642,17 @@ impl App for VORGUI {
 
             match self.tab {
                 VORGUITab::Main => {
-                    ui.add(egui::Label::new("VOR Main"));
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add(egui::Label::new("VOR Main"));
+                        self.router_exec_button(ui, &ctx);
+                    });
+                    
                     ui.separator();
-                    self.status(ui);
-                    self.router_exec_button(ui, &ctx);
+                    ScrollArea::new([false, true]).show(ui, |ui| {
+                        self.status(ui);
+                        ui.add_space(60.);
+                    });
+
                 },
                 VORGUITab::Apps => {
                     ui.add(egui::Label::new("VOR App Configs"));
@@ -485,15 +660,24 @@ impl App for VORGUI {
                     ScrollArea::new([false, true]).show(ui, |ui| {
                         self.list_app_configs(ui);
                         self.add_app(ui);
-                        ui.add_space(40.);
+                        ui.add_space(60.);
                     });
                 },
                 VORGUITab::Firewall => {
                     ui.add(egui::Label::new("OSC Firewall"));
                     ui.separator();
+                    ui.colored_label(Color32::RED, "Not implemented yet.");
                 },
                 VORGUITab::Config => {
-                    ui.add(egui::Label::new("VOR Config"));
+
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add(egui::Label::new("VOR Config"));
+                        ui.with_layout(Layout::right_to_left(), |ui| {
+                            if ui.button(RichText::new("Save")).clicked() {
+                                self.save_vor_config();
+                            }
+                        });
+                    });
                     ui.separator();
                     self.list_vor_config(ui);
                 },
@@ -604,7 +788,7 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>) {
     (router_config, configs)
 }
 
-fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, VORAppStatus, bool)>) {
+fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>) {
     let (vor_router_config, configs) = read_configs();
     if configs.len() < 1 {
         println!("[?] Please put OSC application VOR configs in the [\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs] directory.");
@@ -616,7 +800,7 @@ fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, VORAppStatus, boo
 
     let mut gconfs = vec![];
     for c in configs {
-        gconfs.push((c, VORAppStatus::Stopped, false));
+        gconfs.push((c, VORAppStatus::Stopped, AppConfigState::SAVED));
     }
     return (vor_router_config, gconfs);
 }
@@ -626,9 +810,9 @@ fn main() {
     let (vor_router_config, configs) = config_construct();
 
     let mut native_opts = NativeOptions::default();
-    native_opts.initial_window_size = Some(Vec2::new(325., 400.));
-    native_opts.max_window_size = Some(Vec2::new(325., 400.));
-    native_opts.min_window_size = Some(Vec2::new(325., 400.));
+    native_opts.initial_window_size = Some(Vec2::new(325., 450.));
+    native_opts.max_window_size = Some(Vec2::new(325., 450.));
+    native_opts.min_window_size = Some(Vec2::new(325., 450.));
 
     run_native(
         Box::new(
@@ -815,5 +999,26 @@ fn app_error(ai: i64, err_id: i32, msg: String) -> VORAppIdentifier {
     VORAppIdentifier {
         index: ai,
         status: VORAppStatus::AppError(VORAppError{id: err_id, msg}),
+    }
+}
+
+fn check_valid_port(port: &String) -> bool {
+    if let Ok(p) = port.parse::<u64>() {
+        if p > 0 && p < 65535 {
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+fn check_valid_ipv4(ip: &String) -> bool {
+
+    if ip.parse::<Ipv4Addr>().is_err() {
+        false
+    } else {
+        true
     }
 }
