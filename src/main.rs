@@ -101,13 +101,10 @@ pub struct VORAppIdentifier {
     status: VORAppStatus,
 }
 
-
-
 #[derive(Clone)]
 pub enum AppConfigState {
     EDIT(AppConfigCheck),
     SAVED,
-    //SERROR(AppConfigCheck),
 }
 
 fn app_error(ai: i64, err_id: i32, msg: String) -> VORAppIdentifier {
@@ -231,7 +228,6 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>) {
             };
         }
     }
-    //println!("{:?}", configs);
     (router_config, configs)
 }
 

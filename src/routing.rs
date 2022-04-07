@@ -6,7 +6,6 @@ use rosc::decoder::MTU;
 use std::net::UdpSocket;
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -18,7 +17,6 @@ use crate::{
 
 pub enum RouterMsg {
     ShutdownAll,
-    //RestartAll,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -131,7 +129,6 @@ pub fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, ap
     };
     vrc_sock.set_nonblocking(true).unwrap();
 
-    //let mut app_channel_vector: Vec<Sender<Vec<u8>>> = Vec::new();
     let mut artc = Vec::new();
     let mut indexer = 0;
 
@@ -143,19 +140,12 @@ pub fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, ap
         let (router_tx, router_rx) = mpsc::channel();
         artc.push(router_tx);
 
-        //let (app_r_tx, app_r_rx) = mpsc::channel();
-        //app_channel_vector.push(app_r_tx);
-
         let app_stat_tx_at = app_stat_tx.clone();
         let bcst_app_rx = bcst_tx.subscribe();
         async_rt.spawn(route_app(bcst_app_rx, router_rx, app_stat_tx_at, indexer, app));
         indexer += 1;
     }
     drop(_bcst_rx);// Dont need this rx
-
-    /*// Using Asynchronous queue for msging no need to wait
-    println!("[*] Wait 3 seconds for listener channels..");
-    thread::sleep(Duration::from_secs(3));*/
 
     let (osc_parse_tx, osc_parse_rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
     thread::spawn(move || {parse_vrc_osc(bcst_tx, osc_parse_rx, vrc_sock);});

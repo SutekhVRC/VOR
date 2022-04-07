@@ -1,12 +1,8 @@
-
-
 use eframe::egui::{ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Label};
 use eframe::epaint::Color32;
 use std::sync::mpsc::{self, Sender, Receiver};
-
 use eframe::{epi::{App}, egui::{self, CentralPanel}};
 use std::{fs, thread};
-
 use crate::{
     routing::{
         RouterConfig,
@@ -27,7 +23,6 @@ use crate::{
     check_valid_port,
     file_exists,
 };
-
 
 pub struct VORGUI {
     configs: Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>,
@@ -257,7 +252,6 @@ impl VORGUI {
 
     fn save_app_config(&mut self, app_index: usize) -> AppConfigCheck {
 
-        //println!("[+] SAVING");
         match self.check_app_inputs(app_index) {
             InputValidation::CLEAN => {},
             InputValidation::AH(s) => {
@@ -273,7 +267,7 @@ impl VORGUI {
                 return AppConfigCheck::IV(InputValidation::BP(s));
             },
         }
-        //println!("[+] INPUTS GOOG");
+
         match self.check_app_conflicts(app_index) {
             AppConflicts::NONE => {},
             AppConflicts::CONFLICT((app, con_component)) => {
@@ -284,7 +278,7 @@ impl VORGUI {
         let _ = fs::remove_file(&self.configs[app_index].0.config_path);
         self.configs[app_index].0.config_path = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VorAppConfigs\\{}.json", get_user_home_dir(), self.configs[app_index].0.config_data.app_name);
         fs::write(&self.configs[app_index].0.config_path, serde_json::to_string(&self.configs[app_index].0.config_data).unwrap()).unwrap();
-        //println!("[+] SAVE SUCCESS");
+
         return AppConfigCheck::SUCCESS;
     }
 
@@ -343,9 +337,7 @@ impl VORGUI {
     }
 
     fn add_app(&mut self, ui: &mut egui::Ui) {
-        // Get inputs
-        // Push object into configs
-        // 
+
         ui.group(|ui| {
             if self.adding_new_app {
                 ui.label("App Name");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_name));
@@ -382,8 +374,6 @@ impl VORGUI {
                     });
 
                 });
-
-
             } else {
                 ui.horizontal(|ui| {
                     ui.label("Add new VOR app");
@@ -422,7 +412,7 @@ impl VORGUI {
             ui.vertical_centered(|ui| {
                 ui.add_space(5.0);
                 ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
-                ui.label("0.0.7-alpha");
+                ui.label("0.0.8-alpha");
                 ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
                 ui.add_space(5.0);
             });
