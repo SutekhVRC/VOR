@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+//#![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
 use eframe::egui::Vec2;
@@ -158,7 +158,7 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>) {
 
     //If vor & vor config folder doesnt exist make it
     if !path_exists(&vor_root_dir) {
-        fs::create_dir(&vor_root_dir).expect("[-] Cannot create VOR root directory.");
+        fs::create_dir_all(&vor_root_dir).expect("[-] Cannot create VOR root directory.");
         println!("[+] Created VOR root directory.")
     } else {
         println!("[*] VOR root directory exists.");

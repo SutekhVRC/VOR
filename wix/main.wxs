@@ -143,7 +143,7 @@
             <Shortcut Id="VORStartMenuShortcut"
                 Name="VOR" 
                 Description="VRChat OSC Router"
-                Target="[INSTALLFOLDER]vor.exe"
+                Target="[APPLICATIONFOLDER]\bin\vor.exe"
                 WorkingDirectory="APPLICATIONROOTDIRECTORY"/>
             <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
             <RegistryValue Root="HKCU" Key="Software\SutekhVRC\vor" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
