@@ -130,6 +130,7 @@ impl VORGUI {
                         VORAppStatus::Running => {},
                         VORAppStatus::Stopped => {status_color = Color32::RED},
                         VORAppStatus::AppError(_) => {status_color = Color32::GOLD},
+                        VORAppStatus::Disabled => {status_color = Color32::RED},
                     }
                     ui.horizontal(|ui| {
                         ui.group(|ui| {
@@ -151,7 +152,7 @@ impl VORGUI {
         ui.label("Bind Port: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.bind_port));
         ui.label("VRChat Host: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vrc_host));
         ui.label("VRChat Port: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vrc_port));
-        ui.label("VOR Buffer Size: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vor_buffer_size));
+        ui.label("VOR Buffer Queue Size: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vor_buffer_size));
 
     }
 
@@ -200,7 +201,18 @@ impl VORGUI {
         // Create main router thread - 1 channel store TX in GUI object
             // router thread recv msgs from GUI thread and controls child threads each with their own channel to comm with router thread
         // Generate / Start OSC threads here
-        let confs: Vec<VORConfig> = self.configs.iter().map(|c| c.0.config_data.clone()).collect();
+        let mut ids = -1;
+        let confs: Vec<(VORConfig, i64)> = self.configs.iter()
+        .filter_map(|c| {
+            if let VORAppStatus::Disabled = c.1 {
+                ids += 1;
+                None
+            } else {
+                ids += 1;
+                Some((c.0.config_data.clone(), ids))
+                
+            }
+        }).collect();
 
         let (router_tx, router_rx): (Sender<RouterMsg>, Receiver<RouterMsg>) = mpsc::channel();
         let (app_stat_tx, app_stat_rx): (Sender<VORAppIdentifier>, Receiver<VORAppIdentifier>) = mpsc::channel();
@@ -396,7 +408,7 @@ impl VORGUI {
             ui.vertical_centered(|ui| {
                 ui.add_space(5.0);
                 ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
-                ui.label("0.1.0-beta");
+                ui.label("0.1.1-beta");
                 ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
                 ui.add_space(5.0);
             });
@@ -478,16 +490,33 @@ impl VORGUI {
                                     ui.label(self.configs[i].0.config_data.app_name.as_str());
             
                                     ui.with_layout(Layout::right_to_left(), |ui| {
-                                        if !self.running {
-                                            if ui.button(RichText::new("-").color(Color32::RED).monospace()).clicked() {
-                                                fs::remove_file(&self.configs[i].0.config_path).unwrap();
-                                                self.configs.remove(i);
+                                        //if !self.running {
+                                        match &self.configs[i].1 {
+                                            VORAppStatus::Running => {
+                                                ui.colored_label(Color32::RED, "Locked");
+                                                
+                                            },
+                                            VORAppStatus::Stopped | VORAppStatus::Disabled => {
+                                                if ui.button(RichText::new("-").color(Color32::RED).monospace()).clicked() {
+                                                    fs::remove_file(&self.configs[i].0.config_path).unwrap();
+                                                    self.configs.remove(i);
+                                                }
+                                                if ui.button(RichText::new("Edit")).clicked() {
+                                                    self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::SUCCESS);// Being edited
+                                                }
+                                                if let VORAppStatus::Disabled = self.configs[i].1 {
+                                                    if ui.button(RichText::new("Enable")).clicked() {
+                                                        self.configs[i].1 = VORAppStatus::Stopped;
+                                                    }
+                                                } else {
+                                                    if ui.button(RichText::new("Disable")).clicked() {
+                                                        self.configs[i].1 = VORAppStatus::Disabled;
+                                                    }
+                                                }
+                                            },
+                                            VORAppStatus::AppError(_e) => {
+                                                ui.colored_label(Color32::RED, "Error");
                                             }
-                                            if ui.button(RichText::new("Edit")).clicked() {
-                                                self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::SUCCESS);// Being edited
-                                            }
-                                        } else {
-                                            ui.colored_label(Color32::RED, "Locked");
                                         }
                                     });
                                 });

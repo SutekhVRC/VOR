@@ -60,6 +60,7 @@ pub struct VORAppError {
 }
 
 pub enum VORAppStatus {
+    Disabled,
     Stopped,
     Running,
     AppError(VORAppError),
@@ -68,6 +69,7 @@ pub enum VORAppStatus {
 impl fmt::Display for VORAppStatus {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            VORAppStatus::Disabled => write!(f, "Disabled"),
             VORAppStatus::Stopped => write!(f, "Stopped"),
             VORAppStatus::Running => write!(f, "Running"),
             VORAppStatus::AppError(e) => write!(f, "{}: {}", e.msg, e.id),

@@ -28,7 +28,7 @@ pub struct RouterConfig {
     pub vor_buffer_size: String,
 }
 
-async fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: Sender<VORAppIdentifier>, ai: i64, app: VORConfig) {
+fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: Sender<VORAppIdentifier>, ai: i64, app: VORConfig) {
     let rhp = format!("{}:{}", app.app_host, app.app_port);
     let lhp = format!("{}:{}", app.bind_host, app.bind_port);
     let sock = match UdpSocket::bind(lhp) {
@@ -118,7 +118,7 @@ fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, vrc_s
     }// loop
 }
 
-pub fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_stat_tx: Sender<VORAppIdentifier>, configs: Vec<VORConfig>, vor_queue_size: usize) {
+pub fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, app_stat_tx: Sender<VORAppIdentifier>, configs: Vec<(VORConfig, i64)>, vor_queue_size: usize) {
 
     let vrc_sock = match UdpSocket::bind(router_bind_target) {
         Ok(s) => s,
@@ -130,20 +130,21 @@ pub fn route_main(router_bind_target: String, router_rx: Receiver<RouterMsg>, ap
     vrc_sock.set_nonblocking(true).unwrap();
 
     let mut artc = Vec::new();
-    let mut indexer = 0;
+    //let mut indexer: i64 = 0;
 
-    let async_rt = Runtime::new().unwrap();
+    //let async_rt = Runtime::new().unwrap();
     let (bcst_tx, _bcst_rx) = broadcast::channel(vor_queue_size);
 
-    for app in configs {
+    for (app, id) in configs {
 
         let (router_tx, router_rx) = mpsc::channel();
         artc.push(router_tx);
 
         let app_stat_tx_at = app_stat_tx.clone();
         let bcst_app_rx = bcst_tx.subscribe();
-        async_rt.spawn(route_app(bcst_app_rx, router_rx, app_stat_tx_at, indexer, app));
-        indexer += 1;
+        //async_rt.spawn(route_app(bcst_app_rx, router_rx, app_stat_tx_at, indexer, app));
+        thread::spawn(move || route_app(bcst_app_rx, router_rx, app_stat_tx_at, id, app));
+        //indexer += 1;
     }
     drop(_bcst_rx);// Dont need this rx
 
