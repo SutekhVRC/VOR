@@ -1,4 +1,4 @@
-//#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
 use eframe::egui::Vec2;
@@ -253,9 +253,9 @@ fn main() {
     let (vor_router_config, configs) = config_construct();
 
     let mut native_opts = NativeOptions::default();
-    native_opts.initial_window_size = Some(Vec2::new(325., 450.));
-    native_opts.max_window_size = Some(Vec2::new(325., 450.));
-    native_opts.min_window_size = Some(Vec2::new(325., 450.));
+    native_opts.initial_window_size = Some(Vec2::new(330., 450.));
+    native_opts.max_window_size = Some(Vec2::new(400., 450.));
+    native_opts.min_window_size = Some(Vec2::new(330., 450.));
 
     run_native(
         Box::new(

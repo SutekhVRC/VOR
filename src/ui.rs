@@ -88,14 +88,16 @@ impl VORGUI {
                         }
 
                         ui.separator();
-                        if self.running {
-                            ui.label(RichText::new("Routing").color(Color32::GREEN));
-                        } else {
-                            ui.label(RichText::new("Stopped").color(Color32::RED));
-                        }
+                        ui.with_layout(Layout::right_to_left(), |ui| {
+                            if self.running {
+                                ui.label(RichText::new("Routing").color(Color32::GREEN));
+                            } else {
+                                ui.label(RichText::new("Stopped").color(Color32::RED));
+                            }
+                        });
                         //ui.separator();
                     });
-                    ui.separator();
+                    //ui.separator();
                 });
             });
         });
@@ -119,29 +121,8 @@ impl VORGUI {
         //update vor status
         self.status_refresh();
 
-        ui.group(|ui| {
-            // Router Statuses
-            ui.label("VOR Status");
-            ui.separator();
-            if self.running {
-                ui.horizontal(|ui| {
-                    ui.group(|ui| {
-                        ui.label("Status: ");ui.label(RichText::new("Routing").color(Color32::GREEN));
-                    });
-                });
-            } else {
-                ui.horizontal(|ui| {
-                    ui.group(|ui| {
-                        ui.label("Status: ");ui.label(RichText::new("Stopped").color(Color32::RED));
-                    });
-                });
-            }
-        });
-
-        ui.group(|ui| {
+        ScrollArea::new([false, true]).show(ui, |ui| {
             // App Statuses
-            ui.label("VOR Apps");
-            ui.separator();
             if self.configs.len() > 0 {
                 for i in 0..self.configs.len() {
                     let mut status_color = Color32::GREEN;
@@ -152,8 +133,11 @@ impl VORGUI {
                     }
                     ui.horizontal(|ui| {
                         ui.group(|ui| {
-                            ui.label(format!("{}: ", self.configs[i].0.config_data.app_name));
-                            ui.add(Label::new(RichText::new(format!("{}", self.configs[i].1)).color(status_color)).wrap(true));
+                        ui.label(format!("{}", self.configs[i].0.config_data.app_name));
+                            ui.with_layout(Layout::right_to_left(), |ui| {
+                                ui.separator();
+                                ui.add(Label::new(RichText::new(format!("{}", self.configs[i].1)).color(status_color)).wrap(true));
+                            });
                         });
                     });
                 }
@@ -537,10 +521,10 @@ impl App for VORGUI {
                     });
                     
                     ui.separator();
-                    ScrollArea::new([false, true]).show(ui, |ui| {
-                        self.status(ui);
-                        ui.add_space(60.);
-                    });
+
+                    self.status(ui);
+                    ui.add_space(60.);
+
 
                 },
                 VORGUITab::Apps => {
