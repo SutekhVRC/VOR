@@ -1,4 +1,4 @@
-//#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
 use eframe::egui::{Vec2, ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Label, CollapsingHeader};
@@ -408,6 +408,10 @@ impl VORGUI {
                 }*/
                 if self.configs[i].0.config_data.bind_port == self.configs[app_index].0.config_data.bind_port {
                     return AppConflicts::CONFLICT((self.configs[i].0.config_data.app_name.clone(), "Bind Port".to_string()))
+                }
+
+                if self.configs[app_index].0.config_data.bind_port == self.vor_router_config.bind_port {
+                    return AppConflicts::CONFLICT(("VOR".to_string(), "Bind Port".to_string()))
                 }
                 /*
                 if self.configs[i].0.config_data.app_host == self.configs[app_index].0.config_data.app_host {
@@ -954,8 +958,7 @@ async fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, ap
     println!("[*] OSC App: [{}] Route Initialized..", app.app_name);
     let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Running });
     loop {
-        //println!("..");
-        //println!("[R RX]");
+
         match router_rx.try_recv() {
             Ok(signal) => {
                 //println!("[!] signal: {}", signal);
@@ -967,23 +970,21 @@ async fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, ap
             },
             _ => {/*println!("[!] Try recv errors")*/},
         }
-        //println!("...");
-        //println!("[B RX]");
+
         // Get vrc OSC buffer
         let buffer = match rx.try_recv() {
             Ok(b) => b,
             Err(TryRecvError::Empty) => continue,
             Err(TryRecvError::Lagged(_)) => continue,
             Err(TryRecvError::Closed) => {
-                //println!("[OSC BUFFER RECV FAIL");
+
                 // VRC OSC BUFFER CHANNEL DIED SO KILL ROUTE THREAD
                 let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Stopped });
-                //println!("BONKED1");
+
                 return;
             }
         };
-        //println!(".....");
-        //println!("[B UDPS]");
+
         // Route buffer
         match sock.send_to(&buffer, &rhp) {
             Ok(_bs) => {},
@@ -991,7 +992,6 @@ async fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, ap
                 let _ = app_stat_tx_at.send(app_error(ai, -3, format!("Failed to send VRC OSC buffer to app: {}", _e)));
             }
         }
-        //println!(".........");
     }
 }
 
