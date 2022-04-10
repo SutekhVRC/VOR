@@ -8,12 +8,12 @@ use crate::{
         RouterConfig,
         RouterMsg,
         route_main,
+        PacketFilter,
     },
     VORConfigWrapper,
     VORAppStatus,
     AppConfigState,
     VORAppIdentifier,
-    config_construct,
     VORConfig,
     get_user_home_dir,
     AppConfigCheck,
@@ -34,6 +34,9 @@ pub struct VORGUI {
     new_app: Option<VORConfigWrapper>,
     new_app_cf_exists_err: bool,
     router_msg_recvr: Option<Receiver<VORAppIdentifier>>,
+    pf: PacketFilter,
+    pf_wl_new: (String, bool),
+    pf_bl_new: (String, bool),
 }
 
 pub enum VORGUITab {
@@ -56,6 +59,9 @@ impl VORGUI {
             new_app: None,
             new_app_cf_exists_err: false,
             router_msg_recvr: None,
+            pf: PacketFilter {enabled: false, filter_bad_packets: false, wl_enabled: false, wl_editing: false, address_wl: vec![], bl_enabled: false, bl_editing: false, address_bl: vec![]},
+            pf_bl_new: (String::new(), false),
+            pf_wl_new: (String::new(), false),
         }
     }
 
@@ -74,11 +80,9 @@ impl VORGUI {
                         if ui.button(RichText::new("Apps").monospace()).clicked() {
                             self.tab = VORGUITab::Apps;
                         }
-    
                         ui.separator();
-    
                         
-                        if ui.button(RichText::new("Firewall").monospace()).clicked() {
+                        if ui.button(RichText::new("PF").monospace()).clicked() {
                             self.tab = VORGUITab::Firewall;
                         }
                         ui.separator();
@@ -87,7 +91,7 @@ impl VORGUI {
                             self.tab = VORGUITab::Config;
                         }
 
-                        ui.separator();
+                        //ui.separator();
                         ui.with_layout(Layout::right_to_left(), |ui| {
                             if self.running {
                                 ui.label(RichText::new("Routing").color(Color32::GREEN));
@@ -159,25 +163,26 @@ impl VORGUI {
     fn router_exec_button(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         ui.horizontal(|ui| {
             ui.with_layout(Layout::right_to_left(), |ui| {
+                /* meh
+                if ui.button("Reload").clicked() {
+                    // Reload app configs and VOR config and restart all threads
+                    // Send ShutdownAll
+                    // Reload configs
+                    // Start router thread
+                    if self.running {
+                        self.stop_router();
+                        let (router_config, app_configs) = config_construct();
+                        self.vor_router_config = router_config;
+                        self.configs = app_configs;
+                        self.start_router();
+                    }
+                }*/
                 if self.running {
                     //ui.group(|ui| {
                         if ui.button("Stop").clicked() {
                             if self.running {
                                 self.stop_router();
                                 ctx.request_repaint();
-                            }
-                        }
-                        if ui.button("Reload").clicked() {
-                            // Reload app configs and VOR config and restart all threads
-                            // Send ShutdownAll
-                            // Reload configs
-                            // Start router thread
-                            if self.running {
-                                self.stop_router();
-                                let (router_config, app_configs) = config_construct();
-                                self.vor_router_config = router_config;
-                                self.configs = app_configs;
-                                self.start_router();
                             }
                         }
                     //});
@@ -228,8 +233,11 @@ impl VORGUI {
                 return;
             }
         };
+
+        let pf = self.pf.clone();
+
         thread::spawn(move || {
-            route_main(bind_target, router_rx, app_stat_tx, confs, vor_buf_size);
+            route_main(bind_target, router_rx, app_stat_tx, confs, pf, vor_buf_size);
         });
 
         self.running = true;
@@ -408,7 +416,7 @@ impl VORGUI {
             ui.vertical_centered(|ui| {
                 ui.add_space(5.0);
                 ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
-                ui.label("0.1.1-beta");
+                ui.label("0.1.2-beta");
                 ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
                 ui.add_space(5.0);
             });
@@ -484,46 +492,187 @@ impl VORGUI {
                         });
                     },
                     AppConfigState::SAVED => {
-                        
                             
-                                ui.horizontal(|ui| {
-                                    ui.label(self.configs[i].0.config_data.app_name.as_str());
-            
-                                    ui.with_layout(Layout::right_to_left(), |ui| {
-                                        //if !self.running {
-                                        match &self.configs[i].1 {
-                                            VORAppStatus::Running => {
-                                                ui.colored_label(Color32::RED, "Locked");
-                                                
-                                            },
-                                            VORAppStatus::Stopped | VORAppStatus::Disabled => {
-                                                if ui.button(RichText::new("-").color(Color32::RED).monospace()).clicked() {
-                                                    fs::remove_file(&self.configs[i].0.config_path).unwrap();
-                                                    self.configs.remove(i);
-                                                }
-                                                if ui.button(RichText::new("Edit")).clicked() {
-                                                    self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::SUCCESS);// Being edited
-                                                }
-                                                if let VORAppStatus::Disabled = self.configs[i].1 {
-                                                    if ui.button(RichText::new("Enable")).clicked() {
-                                                        self.configs[i].1 = VORAppStatus::Stopped;
-                                                    }
-                                                } else {
-                                                    if ui.button(RichText::new("Disable")).clicked() {
-                                                        self.configs[i].1 = VORAppStatus::Disabled;
-                                                    }
-                                                }
-                                            },
-                                            VORAppStatus::AppError(_e) => {
-                                                ui.colored_label(Color32::RED, "Error");
+                        ui.horizontal(|ui| {
+                            ui.label(self.configs[i].0.config_data.app_name.as_str());
+    
+                            ui.with_layout(Layout::right_to_left(), |ui| {
+                                //if !self.running {
+                                match &self.configs[i].1 {
+                                    VORAppStatus::Running => {
+                                        ui.colored_label(Color32::RED, "Locked");
+                                        
+                                    },
+                                    VORAppStatus::Stopped | VORAppStatus::Disabled => {
+                                        if ui.button(RichText::new("-").color(Color32::RED).monospace()).clicked() {
+                                            fs::remove_file(&self.configs[i].0.config_path).unwrap();
+                                            self.configs.remove(i);
+                                        }
+                                        if ui.button(RichText::new("Edit")).clicked() {
+                                            self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::SUCCESS);// Being edited
+                                        }
+                                        if let VORAppStatus::Disabled = self.configs[i].1 {
+                                            if ui.button(RichText::new("Enable")).clicked() {
+                                                self.configs[i].1 = VORAppStatus::Stopped;
+                                            }
+                                        } else {
+                                            if ui.button(RichText::new("Disable")).clicked() {
+                                                self.configs[i].1 = VORAppStatus::Disabled;
                                             }
                                         }
-                                    });
-                                });
+                                    },
+                                    VORAppStatus::AppError(_e) => {
+                                        ui.colored_label(Color32::RED, "Error");
+                                    }
+                                }
+                            });
+                        });
                     },
                 }
             });
         }// For list
+    }
+
+    fn pf_buttons(&mut self, ui: &mut egui::Ui) {
+        if !self.pf.enabled {
+            return;
+        }
+        ui.checkbox(&mut self.pf.filter_bad_packets, "Filter bad packets");
+        if !self.pf.bl_enabled {
+            ui.checkbox(&mut self.pf.wl_enabled, "Address Whitelisting Enable");
+        }
+        if !self.pf.wl_enabled {
+            ui.checkbox(&mut self.pf.bl_enabled, "Address Blacklisting Enable");
+        }
+    }
+
+    fn pf_whitelist(&mut self, ui: &mut egui::Ui) {
+        if self.pf.wl_enabled {
+            ui.label("OSC Address Whitelist");
+
+            let wl_add_count = self.pf.address_wl.len();
+
+            if wl_add_count >= 1 {
+                for i in 0..wl_add_count {
+                    if !self.pf.address_wl[i].1 {
+                        ui.horizontal(|ui| {
+                            ui.group(|ui| {
+                                ui.label(egui::RichText::new(&self.pf.address_wl[i].0));
+                                ui.with_layout(Layout::right_to_left(), |ui| {
+                                    if ui.button(RichText::new("-").monospace().color(Color32::RED)).clicked() {
+                                        self.pf.address_wl.remove(i);
+                                    }
+                                });
+                            });
+                        });
+
+                    } else {
+                        ui.text_edit_singleline(&mut self.pf.address_wl[i].0);
+                    }
+                }
+            }
+        }
+    }
+
+    fn add_pf_wl(&mut self, ui: &mut egui::Ui) {
+        // if not adding
+        if !self.pf_wl_new.1 {
+            ui.horizontal(|ui| {
+                ui.group(|ui| {
+                    ui.label("Add wl entry");
+                    ui.with_layout(Layout::right_to_left(), |ui| {
+                        if ui.button("Add").clicked() {
+                            //self.pf.wl_editing = true;
+                            self.pf_wl_new.1 = true;
+                        }
+                    });
+                });
+            });
+        } else {// if adding
+
+            ui.horizontal_wrapped(|ui| {
+                ui.label("WL Entry: ");ui.text_edit_singleline(&mut self.pf_wl_new.0);
+            });
+            ui.horizontal(|ui| {
+                ui.with_layout(Layout::right_to_left(), |ui| {
+
+                    if ui.button("Cancel").clicked() {
+                        self.pf_wl_new.1 = false;
+                        self.pf_wl_new.0.clear();
+                    }
+                    if ui.button("Add entry").clicked() {
+                        self.pf_wl_new.1 = false;
+                        self.pf.address_wl.push(self.pf_wl_new.clone());
+                        self.pf_wl_new.0.clear();
+                    }
+                });
+            });
+        }
+    }
+
+    fn pf_blacklist(&mut self, ui: &mut egui::Ui) {
+        if self.pf.bl_enabled {
+            ui.label("OSC Address Blacklist");
+
+            let bl_add_count = self.pf.address_bl.len();
+
+            if bl_add_count >= 1 {
+                for i in 0..bl_add_count {
+                    if !self.pf.address_bl[i].1 {
+                        ui.horizontal(|ui| {
+                            ui.group(|ui| {
+                                ui.label(egui::RichText::new(&self.pf.address_bl[i].0));
+                                ui.with_layout(Layout::right_to_left(), |ui| {
+                                    if ui.button(RichText::new("-").monospace().color(Color32::RED)).clicked() {
+                                        self.pf.address_bl.remove(i);
+                                    }
+                                });
+                            });
+                        });
+
+                    } else {
+                        ui.text_edit_singleline(&mut self.pf.address_bl[i].0);
+                    }
+                }
+            }
+        }
+    }
+
+    fn add_pf_bl(&mut self, ui: &mut egui::Ui) {
+        // if not adding
+        if !self.pf_bl_new.1 {
+            ui.horizontal(|ui| {
+                ui.group(|ui| {
+                    ui.label("Add bl entry");
+                    ui.with_layout(Layout::right_to_left(), |ui| {
+                        if ui.button("Add").clicked() {
+                            //self.pf.wl_editing = true;
+                            self.pf_bl_new.1 = true;
+                        }
+                    });
+                });
+            });
+        } else {// if adding
+
+            ui.horizontal_wrapped(|ui| {
+                ui.label("BL Entry: ");ui.text_edit_singleline(&mut self.pf_bl_new.0);
+            });
+            ui.horizontal(|ui| {
+                ui.with_layout(Layout::right_to_left(), |ui| {
+
+                    if ui.button("Cancel").clicked() {
+                        self.pf_bl_new.1 = false;
+                        self.pf_bl_new.0.clear();
+                    }
+                    if ui.button("Add entry").clicked() {
+                        self.pf_bl_new.1 = false;
+                        self.pf.address_bl.push(self.pf_bl_new.clone());
+                        self.pf_bl_new.0.clear();
+                    }
+
+                });
+            });
+        }
     }
 }// impl VORGUI
 
@@ -554,7 +703,6 @@ impl App for VORGUI {
                     self.status(ui);
                     ui.add_space(60.);
 
-
                 },
                 VORGUITab::Apps => {
                     ui.add(egui::Label::new("VOR App Configs"));
@@ -566,9 +714,28 @@ impl App for VORGUI {
                     });
                 },
                 VORGUITab::Firewall => {
-                    ui.add(egui::Label::new("OSC Firewall"));
+                    ui.horizontal(|ui| {
+                        ui.add(egui::Label::new("OSC Packet Filter"));
+                        ui.with_layout(Layout::right_to_left(), |ui| {
+                            ui.checkbox(&mut self.pf.enabled, "");
+                        });
+                    });
+
                     ui.separator();
-                    ui.colored_label(Color32::RED, "Not implemented yet.");
+                    self.pf_buttons(ui);
+                    if self.pf.enabled {
+                        if self.pf.wl_enabled {
+                            self.pf_whitelist(ui);
+                            self.add_pf_wl(ui);
+                        } else if self.pf.bl_enabled {
+                            self.pf_blacklist(ui);
+                            self.add_pf_bl(ui);
+                        }
+                    }
+                    
+                    //ui.separator();
+
+                    //ui.colored_label(Color32::RED, "Not implemented yet.");
                 },
                 VORGUITab::Config => {
 
