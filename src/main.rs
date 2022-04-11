@@ -15,7 +15,7 @@ mod ui;
 mod routing;
 
 use ui::VORGUI;
-use routing::RouterConfig;
+use routing::{RouterConfig, PacketFilter};
 
 #[derive(Clone)]
 pub enum AppConfigCheck {
@@ -151,12 +151,13 @@ fn get_user_home_dir() -> String {
     bd.to_string()
 }
 
-fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>) {
+fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>, PacketFilter) {
     
     let mut configs = Vec::<VORConfigWrapper>::new();
     let vor_root_dir = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR", get_user_home_dir());
     let vor_config_file = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORConfig.json", get_user_home_dir());
     let vor_app_configs_dir = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs", get_user_home_dir());
+    let vor_pf_config_file = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VOR_PF.json", get_user_home_dir());
 
     //If vor & vor config folder doesnt exist make it
     if !path_exists(&vor_root_dir) {
@@ -181,7 +182,7 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>) {
                 bind_port: "9001".to_string(),
                 vrc_host: "127.0.0.1".to_string(),
                 vrc_port: "9000".to_string(),
-                vor_buffer_size: "1024".to_string(),
+                vor_buffer_size: "4096".to_string(),
             }
         ).unwrap()).unwrap();
         println!("[+] Created VOR router config.");
@@ -189,6 +190,24 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>) {
         println!("[*] VOR router config exists.");
     }
 
+    // Generate Default PacketFilter config if not exist
+    if !file_exists(&vor_pf_config_file) {
+        fs::write(&vor_pf_config_file, serde_json::to_string(
+            &PacketFilter {
+                enabled: false,
+                filter_bad_packets: false,
+                wl_enabled: false,
+                address_wl: vec![],
+                bl_enabled: false,
+                address_bl: vec![],
+            }
+        ).unwrap()).unwrap();
+        println!("[+] Created VOR PF config.")
+    } else {
+        println!("[*] VOR PF config exists.");
+    }
+
+    // Read VOR config
     let file_con = match fs::read_to_string(&vor_config_file) {
         Ok(c) => c,
         Err(_e) => {
@@ -204,6 +223,24 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>) {
             std::process::exit(0);
         }
     };
+
+    // Read VOR PF config
+    let file_con = match fs::read_to_string(&vor_pf_config_file) {
+        Ok(c) => c,
+        Err(_e) => {
+            println!("[-] Could not parse bytes from file: {} [{}].. Skipping..", vor_pf_config_file, _e);
+            std::process::exit(0);
+        }
+    };
+
+    let pf = match serde_json::from_str(&file_con) {
+        Ok(c) => c,
+        Err(_e) => {
+            println!("[-] Failed to parse json from file: {} [{}]", vor_pf_config_file, _e);
+            std::process::exit(0);
+        }
+    };
+
 
     // Read configs from folder
     let config_files = fs::read_dir(&vor_app_configs_dir).expect("[-] Could not read VOR configs directory.");
@@ -230,11 +267,11 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>) {
             };
         }
     }
-    (router_config, configs)
+    (router_config, configs, pf)
 }
 
-fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>) {
-    let (vor_router_config, configs) = read_configs();
+fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>, PacketFilter) {
+    let (vor_router_config, configs, pf) = read_configs();
     if configs.len() < 1 {
         println!("[?] Please put OSC application VOR configs in the [\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs] directory.");
     } else {
@@ -247,19 +284,19 @@ fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, VORAppStatus, App
     for c in configs {
         gconfs.push((c, VORAppStatus::Stopped, AppConfigState::SAVED));
     }
-    return (vor_router_config, gconfs);
+    return (vor_router_config, gconfs, pf);
 }
 
 fn main() {
 
-    let (vor_router_config, configs) = config_construct();
+    let (vor_router_config, configs, pf) = config_construct();
 
     let mut native_opts = NativeOptions::default();
     native_opts.initial_window_size = Some(Vec2::new(330., 450.));
-    native_opts.max_window_size = Some(Vec2::new(400., 450.));
-    native_opts.min_window_size = Some(Vec2::new(330., 450.));
+    //native_opts.max_window_size = Some(Vec2::new(400., 450.));
+    //native_opts.min_window_size = Some(Vec2::new(330., 450.));
 
     run_native(
         Box::new(
-            VORGUI::new(configs, vor_router_config)), native_opts);
+            VORGUI::new(configs, vor_router_config, pf)), native_opts);
 }

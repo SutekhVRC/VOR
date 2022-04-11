@@ -27,15 +27,15 @@ pub struct RouterConfig {
     pub vor_buffer_size: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct PacketFilter {
     pub enabled: bool,
     pub filter_bad_packets: bool,
     pub wl_enabled: bool,
-    pub wl_editing: bool,
+    //pub wl_editing: bool,
     pub address_wl: Vec<(String, bool)>,
     pub bl_enabled: bool,
-    pub bl_editing: bool,
+    //pub bl_editing: bool,
     pub address_bl: Vec<(String, bool)>,
 }
 
