@@ -11,6 +11,8 @@ use std::fs;
 use std::net::Ipv4Addr;
 use eframe::run_native;
 
+use clap::Parser;
+
 mod ui;
 mod routing;
 
@@ -56,7 +58,6 @@ pub struct VORConfig {
 pub struct VORAppError {
     id: i32,
     msg: String,
-
 }
 
 pub enum VORAppStatus {
@@ -287,7 +288,22 @@ fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, VORAppStatus, App
     return (vor_router_config, gconfs, pf);
 }
 
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+pub struct VCArgs {
+    #[clap(short, long)]
+    pub enable_on_start: bool,
+}
+
+fn parse_args() -> VCArgs {
+    VCArgs::parse()
+}
+
 fn main() {
+
+    let args = parse_args();
+
+    println!("Enable On Start: {}", args.enable_on_start);
 
     let (vor_router_config, configs, pf) = config_construct();
 
@@ -298,5 +314,5 @@ fn main() {
 
     run_native(
         Box::new(
-            VORGUI::new(configs, vor_router_config, pf)), native_opts);
+            VORGUI::new(args, configs, vor_router_config, pf)), native_opts);
 }

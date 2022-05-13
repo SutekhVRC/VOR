@@ -3,6 +3,7 @@ use eframe::epaint::Color32;
 use std::sync::mpsc::{self, Sender, Receiver};
 use eframe::{epi::App, egui::{self, CentralPanel}};
 use std::{fs, thread};
+use crate::VCArgs;
 use crate::{
     routing::{
         RouterConfig,
@@ -26,6 +27,7 @@ use crate::{
 
 pub struct VORGUI {
     configs: Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>,
+    vc_args: VCArgs,
     running: bool,
     tab: VORGUITab,
     router_channel: Option<Sender<RouterMsg>>,
@@ -48,9 +50,10 @@ pub enum VORGUITab {
 
 impl VORGUI {
 
-    pub fn new(configs: Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>, vor_router_config: RouterConfig, pf: PacketFilter) -> Self {
+    pub fn new(vc_args: VCArgs, configs: Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>, vor_router_config: RouterConfig, pf: PacketFilter) -> Self {
         VORGUI {
             configs,
+            vc_args,
             running: false,
             tab: VORGUITab::Main,
             router_channel: None,
@@ -75,18 +78,18 @@ impl VORGUI {
                             self.tab = VORGUITab::Main;
                         }
                         ui.separator();
-    
-    
+
+
                         if ui.button(RichText::new("Apps").monospace()).clicked() {
                             self.tab = VORGUITab::Apps;
                         }
                         ui.separator();
-                        
+
                         if ui.button(RichText::new("PF").monospace()).clicked() {
                             self.tab = VORGUITab::Firewall;
                         }
                         ui.separator();
-    
+
                         if ui.button(RichText::new("Config").monospace()).clicked() {
                             self.tab = VORGUITab::Config;
                         }
@@ -117,7 +120,11 @@ impl VORGUI {
             },
             None => return,
         };
-        self.configs[status.index as usize].1 = status.status;
+        if status.index == -1 {
+            println!("[!] VOR failed to bind listener socket.. Not started!");
+        } else {
+            self.configs[status.index as usize].1 = status.status;
+        }
     }
 
     fn status(&mut self, ui: &mut egui::Ui) {
@@ -329,19 +336,19 @@ impl VORGUI {
     }
 
     fn check_app_inputs(&mut self, app_index: usize) -> InputValidation {
-        
+
         if !check_valid_ipv4(&self.configs[app_index].0.config_data.app_host) {
             return InputValidation::AH(false);
         }
-        
+
         if !check_valid_ipv4(&self.configs[app_index].0.config_data.bind_host) {
             return InputValidation::BH(false);
         }
-        
+
         if !check_valid_port(&self.configs[app_index].0.config_data.app_port) {
             return InputValidation::AP(false);
         }
-        
+
         if !check_valid_port(&self.configs[app_index].0.config_data.bind_port) {
             return InputValidation::BP(false);
         }
@@ -361,7 +368,7 @@ impl VORGUI {
 
                 ui.horizontal_wrapped(|ui| {
                     if self.new_app_cf_exists_err {
-                        
+
                         ui.colored_label(Color32::RED, "App config name already being used.. Choose different app name.");
                         ui.separator();
                     }
@@ -385,7 +392,6 @@ impl VORGUI {
                             }
                         });
                     });
-
                 });
             } else {
                 ui.horizontal(|ui| {
@@ -405,10 +411,8 @@ impl VORGUI {
                             self.adding_new_app = true;// Being added
                         }// New button
                     });
-    
                 });
             }
-
         });
     }
 
@@ -425,7 +429,7 @@ impl VORGUI {
             ui.vertical_centered(|ui| {
                 ui.add_space(5.0);
                 ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
-                ui.label("0.1.3-beta");
+                ui.label("0.1.4-beta");
                 ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
                 ui.add_space(5.0);
             });
@@ -737,6 +741,11 @@ impl App for VORGUI {
         let mut style: Style = (*ctx.style()).clone();
         style.override_text_style = Some(TextStyle::Monospace);
         ctx.set_style(style);
+
+        // Enable on start flag
+        if self.vc_args.enable_on_start {
+            self.start_router();
+        }
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &eframe::epi::Frame) {
@@ -801,10 +810,6 @@ impl App for VORGUI {
                             }
 
                     }
-                    
-                    //ui.separator();
-
-                    //ui.colored_label(Color32::RED, "Not implemented yet.");
                 },
                 VORGUITab::Config => {
 
