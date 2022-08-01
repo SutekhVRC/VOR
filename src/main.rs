@@ -41,6 +41,7 @@ pub enum InputValidation {
     CLEAN,
 }
 
+#[derive(Clone)]
 pub struct VORConfigWrapper {
     config_data: VORConfig,
     config_path: String,

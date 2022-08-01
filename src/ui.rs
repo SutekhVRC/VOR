@@ -34,7 +34,7 @@ pub struct VORGUI {
     vor_router_config: RouterConfig,
     adding_new_app: bool,
     new_app: Option<VORConfigWrapper>,
-    new_app_cf_exists_err: bool,
+    new_app_cf_exists_err: AppConfigCheck,
     router_msg_recvr: Option<Receiver<VORAppIdentifier>>,
     pf: PacketFilter,
     pf_wl_new: (String, bool),
@@ -60,7 +60,7 @@ impl VORGUI {
             vor_router_config,
             adding_new_app: false,
             new_app: None,
-            new_app_cf_exists_err: false,
+            new_app_cf_exists_err: AppConfigCheck::SUCCESS,
             router_msg_recvr: None,
             pf,
             pf_bl_new: (String::new(), false),
@@ -270,20 +270,35 @@ impl VORGUI {
         fs::write(format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORConfig.json", get_user_home_dir()), serde_json::to_string(&self.vor_router_config).unwrap()).unwrap();
     }
 
-    fn save_app_config(&mut self, app_index: usize) -> AppConfigCheck {
+    fn save_app_config(&mut self, app_index: usize, add_new: bool) -> AppConfigCheck {
 
         match self.check_app_inputs(app_index) {
             InputValidation::CLEAN => {},
             InputValidation::AH(s) => {
+                if add_new {
+                    self.configs.pop();
+                }
                 return AppConfigCheck::IV(InputValidation::AH(s));
             },
             InputValidation::AP(s) => {
+                
+                if add_new {
+                    self.configs.pop();
+                }
                 return AppConfigCheck::IV(InputValidation::AP(s));
             },
             InputValidation::BH(s) => {
+                
+                if add_new {
+                    self.configs.pop();
+                }
                 return AppConfigCheck::IV(InputValidation::BH(s));
             },
             InputValidation::BP(s) => {
+
+                if add_new {
+                    self.configs.pop();
+                }
                 return AppConfigCheck::IV(InputValidation::BP(s));
             },
         }
@@ -291,6 +306,10 @@ impl VORGUI {
         match self.check_app_conflicts(app_index) {
             AppConflicts::NONE => {},
             AppConflicts::CONFLICT((app, con_component)) => {
+                
+                if add_new {
+                    self.configs.pop();
+                }
                 return AppConfigCheck::AC(AppConflicts::CONFLICT((app, con_component)));
             }
         }
@@ -367,27 +386,50 @@ impl VORGUI {
                 ui.label("Bind Port");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_port));
 
                 ui.horizontal_wrapped(|ui| {
-                    if self.new_app_cf_exists_err {
-
-                        ui.colored_label(Color32::RED, "App config name already being used.. Choose different app name.");
-                        ui.separator();
+                    match &self.new_app_cf_exists_err {
+                        AppConfigCheck::AC(ac) => {
+                            ui.colored_label(Color32::RED, ac.to_string());
+                        },
+                        AppConfigCheck::IV(iv) => {
+                            ui.colored_label(Color32::RED, iv.to_string());
+                        },
+                        AppConfigCheck::SUCCESS => {},
                     }
+                    ui.separator();
                     ui.horizontal(|ui| {
                         ui.with_layout(Layout::right_to_left(), |ui| {
                             if ui.button(RichText::new("Cancel").color(Color32::RED)).clicked() {
                                 self.new_app = None;
                                 self.adding_new_app = false;
-                                self.new_app_cf_exists_err = false;
+                                self.new_app_cf_exists_err = AppConfigCheck::SUCCESS;
                             }
                             if ui.button(RichText::new("Add")).clicked() {
                                 self.new_app.as_mut().unwrap().config_path = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs\\{}.json", get_user_home_dir(), self.new_app.as_ref().unwrap().config_data.app_name);
-                                if !file_exists(&self.new_app.as_ref().unwrap().config_path) {
-                                    self.configs.push((self.new_app.take().unwrap(), VORAppStatus::Stopped, AppConfigState::SAVED));
-                                    self.save_app_config(self.configs.len()-1);
-                                    self.adding_new_app = false;
-                                    self.new_app_cf_exists_err = false;
+                                if !file_exists(&self.new_app.as_ref().unwrap().config_path) && self.vor_router_config.bind_port != self.new_app.as_ref().unwrap().config_data.bind_port {
+                                    self.configs.push((self.new_app.as_ref().unwrap().clone(), VORAppStatus::Stopped, AppConfigState::SAVED));
+
+                                    match self.save_app_config(self.configs.len()-1, self.adding_new_app) {
+                                        AppConfigCheck::AC(ac) => {
+                                            self.new_app_cf_exists_err = AppConfigCheck::AC(ac);
+                                            println!("[!!] Add new -> AC err");
+                                        },
+                                        AppConfigCheck::IV(iv) => {
+                                            self.new_app_cf_exists_err = AppConfigCheck::IV(iv);
+                                            println!("[!!] Add new -> IV err");
+                                        },
+                                        AppConfigCheck::SUCCESS => {
+                                            self.adding_new_app = false;
+                                            self.new_app_cf_exists_err = AppConfigCheck::SUCCESS;
+                                        }
+                                    }
                                 } else {
-                                    self.new_app_cf_exists_err = true;
+                                    
+                                    println!("[!] Config conflict!");
+                                    if self.vor_router_config.bind_port == self.new_app.as_ref().unwrap().config_data.bind_port {
+                                        self.new_app_cf_exists_err = AppConfigCheck::AC(AppConflicts::CONFLICT((self.new_app.as_ref().unwrap().config_data.bind_port.clone(), "VOR bind port conflict".to_string())));
+                                    } else {
+                                        self.new_app_cf_exists_err = AppConfigCheck::AC(AppConflicts::CONFLICT((self.new_app.as_ref().unwrap().config_data.app_name.clone(), "App Name".to_string())));
+                                    }
                                 }
                             }
                         });
@@ -429,7 +471,7 @@ impl VORGUI {
             ui.vertical_centered(|ui| {
                 ui.add_space(5.0);
                 ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
-                ui.label("0.1.4-beta");
+                ui.label("0.1.5-beta");
                 ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
                 ui.add_space(5.0);
             });
@@ -438,6 +480,7 @@ impl VORGUI {
 
     fn list_app_configs(&mut self, ui: &mut egui::Ui) {
         let conf_count = self.configs.len();
+        //print!("[CONF COUNT: {}\r", conf_count);
         for i in 0..conf_count {
             //println!("[+] Config Length: {}", self.configs.len());
             let check;
@@ -484,7 +527,7 @@ impl VORGUI {
                                 ui.group(|ui| {
                                     if ui.button(RichText::new("Save")).clicked() {
                                         // Save config / Input val / Val collision
-                                        match self.save_app_config(i) {
+                                        match self.save_app_config(i, false) {
                                             AppConfigCheck::SUCCESS => {
                                                 self.configs[i].2 = AppConfigState::SAVED;// Not being edited
                                             },
@@ -520,6 +563,7 @@ impl VORGUI {
                                         if ui.button(RichText::new("-").color(Color32::RED).monospace()).clicked() {
                                             fs::remove_file(&self.configs[i].0.config_path).unwrap();
                                             self.configs.remove(i);
+                                            return;
                                         }
                                         if ui.button(RichText::new("Edit")).clicked() {
                                             self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::SUCCESS);// Being edited

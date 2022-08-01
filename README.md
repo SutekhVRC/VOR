@@ -25,3 +25,5 @@ CLI Args:
     - Bind Host: The host/interface to bind the route UDP socket to (This will probably ALWAYS be 127.0.0.1).
     - Bind Port: The port to bind the route UDP socket to. This can be any port that is not being used anywhere else. These must be unique between every VOR app/route you add. NOTE: It is best to keep your bind ports in the higher range to reduce the likelihood of it interfering with another service.
     - Click Add
+
+4. Remember to set your OSC apps to bind on different ports (The "App Ports" in VOR). And they should still be sending directly to VRChat (VRChat default bind port is 9000).

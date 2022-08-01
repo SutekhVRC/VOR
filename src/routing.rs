@@ -51,8 +51,10 @@ fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat
     };
     println!("[*] OSC App: [{}] Route Initialized..", app.app_name);
     let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Running });
-    loop {
+    //let r = router_rx.recv_timeout(std::time::Duration::from_secs(1));
 
+    loop {
+        //println!("router_rx start");
         match router_rx.try_recv() {
             Ok(signal) => {
                 //println!("[!] signal: {}", signal);
@@ -64,7 +66,7 @@ fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat
             },
             _ => {/*println!("[!] Try recv errors")*/},
         }
-
+        //println!("router_rx done");
         // Get vrc OSC buffer
         let buffer = match rx.try_recv() {
             Ok(b) => b,
@@ -165,6 +167,7 @@ fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, pf: P
                 }
             },
             Err(_e) => {
+                //println!("UDPSOCKERR: {}", _e);
                 match router_rx.try_recv() {
                     Ok(sig) => {
                         if sig {
@@ -172,7 +175,7 @@ fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, pf: P
                             return;
                         }
                     },
-                    Err(_) => {},
+                    Err(_e) => {}//println!("router_rx vrc recv fn : {}", _e);},
                 }
             },
         }// vrc recv sock
@@ -217,6 +220,7 @@ pub fn route_main(
     drop(_bcst_rx);// Dont need this rx
 
     let (osc_parse_tx, osc_parse_rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
+    //let sock_clone = vrc_sock.try_clone().unwrap();
     thread::spawn(move || {parse_vrc_osc(bcst_tx, osc_parse_rx, pf, vrc_sock);});
     println!("[+] Started VRChat OSC Router.");
 
@@ -228,6 +232,8 @@ pub fn route_main(
 
                 // Shutdown osc parse thread first
                 osc_parse_tx.send(true).unwrap();
+
+                //drop(vrc_sock);
                 println!("[*] Shutdown signal: OSC receive thread");
 
                 // Shutdown app route threads
