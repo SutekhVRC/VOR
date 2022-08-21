@@ -95,7 +95,7 @@ fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, pf: P
     let pf_wl: Vec<String> = pf.address_wl.iter().map(|i| i.0.clone()).collect();
     let pf_bl: Vec<String> = pf.address_bl.iter().map(|i| i.0.clone()).collect();
     let mut buf = [0u8; MTU];
-    vrc_sock.set_nonblocking(true).unwrap();
+
     loop {
 
         match vrc_sock.recv_from(&mut buf) {
@@ -191,6 +191,7 @@ pub fn route_main(
     vor_queue_size: usize
 ) {
 
+    // Bind UDP listening socket
     let vrc_sock = match UdpSocket::bind(router_bind_target) {
         Ok(s) => s,
         Err(_e) => {
@@ -198,7 +199,10 @@ pub fn route_main(
             return;
         }
     };
-    vrc_sock.set_nonblocking(true).unwrap();
+    // Setting this socket to timed blocking does not have a dramatic effect on message passing delays due to socket blocking
+    //(half ass'd performance patch for now until I want to work on this project again lol)
+    vrc_sock.set_nonblocking(false).unwrap();
+    let _ = vrc_sock.set_read_timeout(Some(std::time::Duration::from_secs(1)));
 
     let mut artc = Vec::new();
     //let mut indexer: i64 = 0;
