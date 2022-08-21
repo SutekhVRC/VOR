@@ -27,3 +27,15 @@ CLI Args:
     - Click Add
 
 4. Remember to set your OSC apps to bind on different ports (The "App Ports" in VOR). And they should still be sending directly to VRChat (VRChat default bind port is 9000).
+
+# PF (Packet Filter)
+- The packet filter can be used to stop malformed packets as well as unwanted OSC packets from being routed to any apps. This can be useful for example when certain avatar animation controller parameter names do not meet the OSC spec and you need to filter them out so they dont crash your apps. (I'm looking at you, various animator obfuscation tools >.>)
+- When you change the PF config remember to click the save button. PF rules will be applied the next time routing is started.
+- Filter bad packets: does what it says :^) (Drops packets that do not meet the OSC protocol spec.)
+- Whitelisting mode: Defaults to disallow all OSC addresses. Add OSC addresses to whilelist to allow it.
+- Blacklisting mode: Defaults to allow all OSC addresses. Add OSC addresses to blacklist to block it.
+
+# Planned features sometime in the future :)
+
+### Asynchronous app route handling mode (For performance/efficiency.. smile)
+### Update notifications
