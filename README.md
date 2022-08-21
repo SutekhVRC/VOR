@@ -1,18 +1,18 @@
 # VOR
-### Beta: many bugs still, as well as high performance only (Will use about 25-30% CPU depending on how many apps).
+### Beta: Report bugs! Performance: (Will use about 7% CPU with one app. For app added, will go up about 6%-7%).
 ### Working on adding an optimized mode, as the high CPU usage is intended for performance for my personal use case.
 ### Please report bugs!
 - Note that VOR is meant to be used to route OSC traffic that is RECEIVED from VRChat. All OSC apps can send to VRC on their own, but VRChat can only send to one port.
 
-CLI Args:
---enable-on-start / -e
+##CLI Args
+- Start the router enabled: --enable-on-start / -e
 
-# Install
+## Install
 
 1. Download the [latest](https://github.com/SutekhVRC/VOR/releases/latest) MSI and run it.
 2. vor.exe will be installed to C:\Program Files\vor\bin\vor.exe. You can also search for it by pressing the windows key and searching "VOR".
 
-# Setup an app
+## Setup an app
 
 1. Once VOR is opened go to the "Apps" tab. This is where you can add "apps". An app is basically a route to send to.
 
@@ -28,14 +28,14 @@ CLI Args:
 
 4. Remember to set your OSC apps to bind on different ports (The "App Ports" in VOR). And they should still be sending directly to VRChat (VRChat default bind port is 9000).
 
-# PF (Packet Filter)
+## PF (Packet Filter)
 - The packet filter can be used to stop malformed packets as well as unwanted OSC packets from being routed to any apps. This can be useful for example when certain avatar animation controller parameter names do not meet the OSC spec and you need to filter them out so they dont crash your apps. (I'm looking at you, various animator obfuscation tools >.>)
 - When you change the PF config remember to click the save button. PF rules will be applied the next time routing is started.
 - Filter bad packets: does what it says :^) (Drops packets that do not meet the OSC protocol spec.)
 - Whitelisting mode: Defaults to disallow all OSC addresses. Add OSC addresses to whilelist to allow it.
 - Blacklisting mode: Defaults to allow all OSC addresses. Add OSC addresses to blacklist to block it.
 
-# Planned features sometime in the future :)
+## Planned features sometime in the future :)
 
 ### Asynchronous app route handling mode (For performance/efficiency.. smile)
 ### Update notifications
