@@ -1,11 +1,10 @@
 # VOR
 ### Beta: Report bugs!
-### Version 0.1.60-beta 
+### Version 0.1.61-beta 
 - I have added an asynchronous routing mode that drastically improves efficiency of router execution threads.
 - Asynchronous option is in the config tab!
 ### Please report bugs!
 - Note that VOR is meant to be used to route OSC traffic that is RECEIVED from VRChat. All OSC apps can send to VRC on their own, but VRChat can only send to one port.
-
 
 ## CLI Args
 
@@ -33,11 +32,19 @@
 4. Remember to set your OSC apps to bind on different ports (The "App Ports" in VOR). And they should still be sending directly to VRChat (VRChat default bind port is 9000).
 
 ## PF (Packet Filter)
+
+### Option Summary
 - The packet filter can be used to stop malformed packets as well as unwanted OSC packets from being routed to any apps. This can be useful for example when certain avatar animation controller parameter names do not meet the OSC spec and you need to filter them out so they dont crash your apps. (I'm looking at you, various animator obfuscation tools >.>)
 - When you change the PF config remember to click the save button. PF rules will be applied the next time routing is started.
 - Filter bad packets: does what it says :^) (Drops packets that do not meet the OSC protocol spec.)
 - Whitelisting mode: Defaults to disallow all OSC addresses. Add OSC addresses to whilelist to allow it.
 - Blacklisting mode: Defaults to allow all OSC addresses. Add OSC addresses to blacklist to block it.
+
+### Use Cases
+- Use the whitelist filter to only allow parameters you are looking for.
+- Use the blacklist to block parameters you dont want to send to apps. (Parameters like voice and movement parameters are a great thing to block)
+- Can keep packets sent to apps clean.
+- Helps with efficiency to drop unused parameters!
 
 ## VOR Router Config
 
