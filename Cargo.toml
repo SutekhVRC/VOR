@@ -1,6 +1,6 @@
 [package]
 name = "vor"
-version = "0.1.6"
+version = "0.1.60"
 edition = "2021"
 authors = ["SutekhVRC"]
 

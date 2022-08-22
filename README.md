@@ -1,6 +1,6 @@
 # VOR
 ### Beta: Report bugs!
-### Version 0.1.6-beta 
+### Version 0.1.60-beta 
 - I have added an asynchronous routing mode that drastically improves efficiency of router execution threads.
 - Asynchronous option is in the config tab!
 ### Please report bugs!

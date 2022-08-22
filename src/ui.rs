@@ -488,7 +488,7 @@ impl VORGUI {
             ui.vertical_centered(|ui| {
                 ui.add_space(5.0);
                 ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
-                ui.label("0.1.6-beta");
+                ui.label("0.1.60-beta");
                 ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
                 ui.add_space(5.0);
             });
