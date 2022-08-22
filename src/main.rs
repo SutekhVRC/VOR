@@ -1,4 +1,4 @@
-//#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
 use eframe::egui::Vec2;
