@@ -1,4 +1,7 @@
 # VOR
+
+*A router application for VRChat OSC, which allows OSC packets to be routed to multiple OSC applications.*
+
 ### Beta: Report bugs!
 ### Version 0.1.61-beta 
 - I have added an asynchronous routing mode that drastically improves efficiency of router execution threads.
