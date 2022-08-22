@@ -278,7 +278,9 @@ impl VORGUI {
 
         if self.vor_router_config.async_mode {
             for app_conf in &mut self.configs {
-                app_conf.1 = VORAppStatus::Stopped;
+                if let VORAppStatus::Running = app_conf.1 {
+                    app_conf.1 = VORAppStatus::Stopped;
+                }
             }
         }
     }
@@ -488,7 +490,7 @@ impl VORGUI {
             ui.vertical_centered(|ui| {
                 ui.add_space(5.0);
                 ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
-                ui.label("0.1.61-beta");
+                ui.label("0.1.62-beta");
                 ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
                 ui.add_space(5.0);
             });
