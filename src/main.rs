@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+//#![windows_subsystem = "windows"]
 
 use eframe::NativeOptions;
 use eframe::egui::Vec2;
@@ -164,32 +164,26 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>, PacketFilter) {
     //If vor & vor config folder doesnt exist make it
     if !path_exists(&vor_root_dir) {
         fs::create_dir_all(&vor_root_dir).expect("[-] Cannot create VOR root directory.");
-        println!("[+] Created VOR root directory.")
+        //println!("[+] Created VOR root directory.")
     } else {
-        println!("[*] VOR root directory exists.");
+        //println!("[*] VOR root directory exists.");
     }
 
     if !path_exists(&vor_app_configs_dir) {
         fs::create_dir(&vor_app_configs_dir).expect("[-] Cannot create VOR configs directory.");
-        println!("[+] Created VOR configs directory.");
+        //println!("[+] Created VOR configs directory.");
     } else {
-        println!("[*] VOR configs directory exists.");
+        //println!("[*] VOR configs directory exists.");
     }
 
     //Generate Default VOR config if not exist.
     if !file_exists(&vor_config_file) {
         fs::write(&vor_config_file, serde_json::to_string(
-            &RouterConfig {
-                bind_host: "127.0.0.1".to_string(),
-                bind_port: "9001".to_string(),
-                vrc_host: "127.0.0.1".to_string(),
-                vrc_port: "9000".to_string(),
-                vor_buffer_size: "4096".to_string(),
-            }
+            &RouterConfig::default()
         ).unwrap()).unwrap();
-        println!("[+] Created VOR router config.");
+        //println!("[+] Created VOR router config.");
     } else {
-        println!("[*] VOR router config exists.");
+        //println!("[*] VOR router config exists.");
     }
 
     // Generate Default PacketFilter config if not exist
@@ -204,25 +198,36 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>, PacketFilter) {
                 address_bl: vec![],
             }
         ).unwrap()).unwrap();
-        println!("[+] Created VOR PF config.")
+        //println!("[+] Created VOR PF config.")
     } else {
-        println!("[*] VOR PF config exists.");
+        //println!("[*] VOR PF config exists.");
     }
 
     // Read VOR config
-    let file_con = match fs::read_to_string(&vor_config_file) {
-        Ok(c) => c,
+    let router_config = match fs::read_to_string(&vor_config_file) {
+        Ok(c) => {
+            match serde_json::from_str(&c) {
+                Ok(c) => c,
+                Err(_e) => {
+                    //println!("[-] Failed to parse json from file: {} [{}]", vor_config_file, _e);
+                    
+                    // Overwrite configs when fail to parse
+                    fs::write(&vor_config_file, serde_json::to_string(
+                        &RouterConfig::default()
+                    ).unwrap()).unwrap();
+                    //println!("[+] Created VOR router config.");
+                    RouterConfig::default()
+                }
+            }
+        },
         Err(_e) => {
-            println!("[-] Could not parse bytes from file: {} [{}].. Skipping..", vor_config_file, _e);
-            std::process::exit(0);
-        }
-    };
-
-    let router_config = match serde_json::from_str(&file_con) {
-        Ok(c) => c,
-        Err(_e) => {
-            println!("[-] Failed to parse json from file: {} [{}]", vor_config_file, _e);
-            std::process::exit(0);
+            //println!("[-] Could not parse bytes from file: {} [{}].. Generating and writing default..", vor_config_file, _e);
+            // Overwrite configs when fail to parse
+            fs::write(&vor_config_file, serde_json::to_string(
+                &RouterConfig::default()
+            ).unwrap()).unwrap();
+            //println!("[+] Created VOR router config.");
+            RouterConfig::default()
         }
     };
 
@@ -230,7 +235,7 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>, PacketFilter) {
     let file_con = match fs::read_to_string(&vor_pf_config_file) {
         Ok(c) => c,
         Err(_e) => {
-            println!("[-] Could not parse bytes from file: {} [{}].. Skipping..", vor_pf_config_file, _e);
+            //println!("[-] Could not parse bytes from file: {} [{}].. Skipping..", vor_pf_config_file, _e);
             std::process::exit(0);
         }
     };
@@ -238,7 +243,7 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>, PacketFilter) {
     let pf = match serde_json::from_str(&file_con) {
         Ok(c) => c,
         Err(_e) => {
-            println!("[-] Failed to parse json from file: {} [{}]", vor_pf_config_file, _e);
+            //println!("[-] Failed to parse json from file: {} [{}]", vor_pf_config_file, _e);
             std::process::exit(0);
         }
     };
@@ -250,20 +255,20 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>, PacketFilter) {
         let file = f.unwrap();
         if file.file_type().unwrap().is_file() {
 
-            let file_n = file.file_name().to_str().expect("[-] Failed to parse file name.").to_string();
+            //let file_n = file.file_name().to_str().expect("[-] Failed to parse file name.").to_string();
             let file_p = file.path().as_os_str().to_str().expect("[-] Failed to parse file path.").to_string();
 
             let file_con = match fs::read_to_string(&file_p) {
                 Ok(c) => c,
                 Err(_e) => {
-                    println!("[-] Could not parse bytes from file: {} [{}].. Skipping..", file_n, _e);
+                    //println!("[-] Could not parse bytes from file: {} [{}].. Skipping..", file_n, _e);
                     continue;
                 }
             };
             match serde_json::from_str(&file_con) {
                 Ok(c) => configs.push(VORConfigWrapper{config_data: c, config_path: file_p}),
                 Err(_e) => {
-                    println!("[-] Failed to parse json from file: {} [{}]", file_n, _e);
+                    //println!("[-] Failed to parse json from file: {} [{}]", file_n, _e);
                     continue;
                 }
             };
@@ -274,13 +279,14 @@ fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>, PacketFilter) {
 
 fn config_construct() -> (RouterConfig, Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>, PacketFilter) {
     let (vor_router_config, configs, pf) = read_configs();
+    /*
     if configs.len() < 1 {
-        println!("[?] Please put OSC application VOR configs in the [\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs] directory.");
+        //println!("[?] Please put OSC application VOR configs in the [\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs] directory.");
     } else {
         for c in &configs {
-            println!("[App]: {}\n [*] Route -> {}:{}", c.config_data.app_name, c.config_data.app_host, c.config_data.app_port);
+            //println!("[App]: {}\n [*] Route -> {}:{}", c.config_data.app_name, c.config_data.app_host, c.config_data.app_port);
         }
-    }
+    }*/
 
     let mut gconfs = vec![];
     for c in configs {
@@ -304,7 +310,7 @@ fn main() {
 
     let args = parse_args();
 
-    println!("Enable On Start: {}", args.enable_on_start);
+    //println!("Enable On Start: {}", args.enable_on_start);
 
     let (vor_router_config, configs, pf) = config_construct();
 

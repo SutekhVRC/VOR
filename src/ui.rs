@@ -121,7 +121,7 @@ impl VORGUI {
             None => return,
         };
         if status.index == -1 {
-            println!("[!] VOR failed to bind listener socket.. Not started!");
+            //println!("[!] VOR failed to bind listener socket.. Not started!");
         } else {
             self.configs[status.index as usize].1 = status.status;
         }
@@ -159,6 +159,9 @@ impl VORGUI {
 
     fn list_vor_config(&mut self, ui: &mut egui::Ui) {
         // UI for VOR config
+        ui.add_space(1.0);
+        ui.label("Networking");
+        ui.separator();
         ui.horizontal_wrapped(|ui| {
             ui.label("Bind Host: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.bind_host));
         });
@@ -174,6 +177,14 @@ impl VORGUI {
         ui.horizontal_wrapped(|ui| {
             ui.label("VOR Buffer Queue Size: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vor_buffer_size));
         });
+
+        ui.separator();
+        ui.add_space(1.0);
+        ui.label("Routing mode");
+        ui.horizontal_wrapped(|ui| {
+            ui.checkbox(&mut self.vor_router_config.async_mode, "Asynchronous routing")
+        });
+        
     }
 
     fn router_exec_button(&mut self, ui: &mut egui::Ui, ctx: &Context) {
@@ -251,9 +262,9 @@ impl VORGUI {
         };
 
         let pf = self.pf.clone();
-
+        let async_mode = self.vor_router_config.async_mode;
         thread::spawn(move || {
-            route_main(bind_target, router_rx, app_stat_tx, confs, pf, vor_buf_size);
+            route_main(bind_target, router_rx, app_stat_tx, confs, pf, vor_buf_size, async_mode);
         });
 
         self.running = true;
@@ -264,6 +275,12 @@ impl VORGUI {
         self.router_channel.take().unwrap().send(RouterMsg::ShutdownAll).unwrap();
         //self.router_msg_recvr = None;
         self.running = false;
+
+        if self.vor_router_config.async_mode {
+            for app_conf in &mut self.configs {
+                app_conf.1 = VORAppStatus::Stopped;
+            }
+        }
     }
 
     fn save_vor_config(&mut self) {
@@ -411,11 +428,11 @@ impl VORGUI {
                                     match self.save_app_config(self.configs.len()-1, self.adding_new_app) {
                                         AppConfigCheck::AC(ac) => {
                                             self.new_app_cf_exists_err = AppConfigCheck::AC(ac);
-                                            println!("[!!] Add new -> AC err");
+                                            //println!("[!!] Add new -> AC err");
                                         },
                                         AppConfigCheck::IV(iv) => {
                                             self.new_app_cf_exists_err = AppConfigCheck::IV(iv);
-                                            println!("[!!] Add new -> IV err");
+                                            //println!("[!!] Add new -> IV err");
                                         },
                                         AppConfigCheck::SUCCESS => {
                                             self.adding_new_app = false;
@@ -424,7 +441,7 @@ impl VORGUI {
                                     }
                                 } else {
                                     
-                                    println!("[!] Config conflict!");
+                                    //println!("[!] Config conflict!");
                                     if self.vor_router_config.bind_port == self.new_app.as_ref().unwrap().config_data.bind_port {
                                         self.new_app_cf_exists_err = AppConfigCheck::AC(AppConflicts::CONFLICT((self.new_app.as_ref().unwrap().config_data.bind_port.clone(), "VOR bind port conflict".to_string())));
                                     } else {
@@ -471,7 +488,7 @@ impl VORGUI {
             ui.vertical_centered(|ui| {
                 ui.add_space(5.0);
                 ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
-                ui.label("0.1.51-beta");
+                ui.label("0.1.6-beta");
                 ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
                 ui.add_space(5.0);
             });
@@ -480,9 +497,9 @@ impl VORGUI {
 
     fn list_app_configs(&mut self, ui: &mut egui::Ui) {
         let conf_count = self.configs.len();
-        //print!("[CONF COUNT: {}\r", conf_count);
+        ////print!("[CONF COUNT: {}\r", conf_count);
         for i in 0..conf_count {
-            //println!("[+] Config Length: {}", self.configs.len());
+            ////println!("[+] Config Length: {}", self.configs.len());
             let check;
             if conf_count == self.configs.len() {
                 check = self.configs[i].2.clone();

@@ -2,6 +2,7 @@ use rosc::{self, OscPacket};
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{self, Sender as bcst_Sender, Receiver as bcst_Receiver};
 use rosc::decoder::MTU;
+use tokio::sync::broadcast::error::RecvError;
 use std::net::UdpSocket;
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread;
@@ -25,6 +26,20 @@ pub struct RouterConfig {
     pub vrc_host: String,
     pub vrc_port: String,
     pub vor_buffer_size: String,
+    pub async_mode: bool,
+}
+
+impl Default for RouterConfig {
+    fn default() -> Self {
+        RouterConfig {
+            bind_host: "127.0.0.1".to_string(),
+            bind_port: "9001".to_string(),
+            vrc_host: "127.0.0.1".to_string(),
+            vrc_port: "9000".to_string(),
+            vor_buffer_size: "4096".to_string(),
+            async_mode: true
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -49,27 +64,35 @@ fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat
             return;// Close app route thread because app failed to bind
         }
     };
-    println!("[*] OSC App: [{}] Route Initialized..", app.app_name);
+    //println!("[*] OSC App: [{}] Route Initialized..", app.app_name);
     let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Running });
     //let r = router_rx.recv_timeout(std::time::Duration::from_secs(1));
 
     loop {
-        //println!("router_rx start");
+        ////println!("router_rx start");
         match router_rx.try_recv() {
             Ok(signal) => {
-                //println!("[!] signal: {}", signal);
+                ////println!("[!] signal: {}", signal);
                 if signal {
                     let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Stopped });
-                    println!("[!] Send Stopped status");
+                    //println!("[!] Send Stopped status");
                     return;
                 }
             },
-            _ => {/*println!("[!] Try recv errors")*/},
+            _ => {/*//println!("[!] Try recv errors")*/},
         }
-        //println!("router_rx done");
+        ////println!("router_rx done");
         // Get vrc OSC buffer
-        let buffer = match rx.try_recv() {
-            Ok(b) => b,
+        match rx.try_recv() {
+            Ok(b) => {
+                                // Route buffer
+                match sock.send_to(&b, &rhp) {
+                    Ok(_bs) => {},
+                    Err(_e) => {
+                        let _ = app_stat_tx_at.send(app_error(ai, -3, format!("Failed to send VRC OSC buffer to app: {}", _e)));
+                    }
+                }
+            },
             Err(TryRecvError::Empty) => continue,
             Err(TryRecvError::Lagged(_)) => continue,
             Err(TryRecvError::Closed) => {
@@ -80,14 +103,58 @@ fn route_app(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat
                 return;
             }
         };
+    }
+}
 
-        // Route buffer
-        match sock.send_to(&buffer, &rhp) {
-            Ok(_bs) => {},
-            Err(_e) => {
-                let _ = app_stat_tx_at.send(app_error(ai, -3, format!("Failed to send VRC OSC buffer to app: {}", _e)));
-            }
+async fn route_app_async(mut rx: bcst_Receiver<Vec<u8>>, router_rx: Receiver<bool>, app_stat_tx_at: Sender<VORAppIdentifier>, ai: i64, app: VORConfig) {
+    let rhp = format!("{}:{}", app.app_host, app.app_port);
+    let lhp = format!("{}:{}", app.bind_host, app.bind_port);
+    let sock = match tokio::net::UdpSocket::bind(lhp).await {
+        Ok(s) => s,
+        Err(_e) => {
+            let _ = app_stat_tx_at.send(app_error(ai, -2, format!("Failed to bind app UdpSocket: {}", _e)));
+            return;// Close app route thread because app failed to bind
         }
+    };
+    //println!("[*] OSC App: [{}] Route Initialized..", app.app_name);
+    let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Running });
+    //let r = router_rx.recv_timeout(std::time::Duration::from_secs(1));
+
+    loop {
+        ////println!("router_rx start");
+        match router_rx.try_recv() {
+            Ok(signal) => {
+                ////println!("[!] signal: {}", signal);
+                if signal {
+                    let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Stopped });
+                    //println!("[!] Send Stopped status");
+                    return;
+                }
+            },
+            _ => {/*//println!("[!] Try recv errors")*/},
+        }
+        ////println!("router_rx done");
+        // Get vrc OSC buffer
+        // route_main thread should abort this await on async runtime shutdown when threads are aborted. So don't have to worry about thread blocking with recv
+        match rx.recv().await {
+            Ok(b) => {
+                // Route buffer
+                match sock.send_to(&b, &rhp).await {
+                    Ok(_bs) => {},
+                    Err(_e) => {
+                        let _ = app_stat_tx_at.send(app_error(ai, -3, format!("Failed to send VRC OSC buffer to app: {}", _e)));
+                    }
+                }
+            },
+            Err(RecvError::Lagged(_)) => continue,
+            Err(RecvError::Closed) => {
+
+                // VRC OSC BUFFER CHANNEL DIED SO KILL ROUTE THREAD
+                let _ = app_stat_tx_at.send(VORAppIdentifier { index: ai, status: VORAppStatus::Stopped });
+
+                return;
+            }
+        };
     }
 }
 
@@ -120,7 +187,7 @@ fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, pf: P
                                 },
                                 Err(_e) => {
                                     if !pf.filter_bad_packets {
-                                        println!("[*] Routing bad OSC packet!");
+                                        //println!("[*] Routing bad OSC packet!");
                                         bcst_tx.send(buf.to_vec()).unwrap();
                                     }
                                 },
@@ -136,7 +203,7 @@ fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, pf: P
                                 },
                                 Err(_e) => {// Packet was bad should it still be sent?
                                     if !pf.filter_bad_packets {
-                                        println!("[*] Routing bad OSC packet!");
+                                        //println!("[*] Routing bad OSC packet!");
                                         bcst_tx.send(buf.to_vec()).unwrap();
                                     }
                                 },
@@ -146,7 +213,7 @@ fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, pf: P
                             if pf.filter_bad_packets {// If filter bad packets enabled check if bad packet
                                 if let Ok(_) = rosc::decoder::decode_udp(&buf) {
                                     bcst_tx.send(buf.to_vec()).unwrap();
-                                } else {println!("[*] Filtered bad packet");}
+                                } else {/*println!("[*] Filtered bad packet");*/}
                             } else {// If filter bad packets not enabled then send!
                                 bcst_tx.send(buf.to_vec()).unwrap();
                             }
@@ -158,7 +225,7 @@ fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, pf: P
                     match router_rx.try_recv() {
                         Ok(sig) => {
                             if sig {
-                                println!("[!] VRC OSC thread shutdown");
+                                //println!("[!] VRC OSC thread shutdown");
                                 return;
                             }
                         },
@@ -167,15 +234,15 @@ fn parse_vrc_osc(bcst_tx: bcst_Sender<Vec<u8>>, router_rx: Receiver<bool>, pf: P
                 }
             },
             Err(_e) => {
-                //println!("UDPSOCKERR: {}", _e);
+                ////println!("UDPSOCKERR: {}", _e);
                 match router_rx.try_recv() {
                     Ok(sig) => {
                         if sig {
-                            println!("[!] VRC OSC thread shutdown");
+                            //println!("[!] VRC OSC thread shutdown");
                             return;
                         }
                     },
-                    Err(_e) => {}//println!("router_rx vrc recv fn : {}", _e);},
+                    Err(_e) => {}////println!("router_rx vrc recv fn : {}", _e);},
                 }
             },
         }// vrc recv sock
@@ -188,7 +255,8 @@ pub fn route_main(
     app_stat_tx: Sender<VORAppIdentifier>,
     configs: Vec<(VORConfig, i64)>,
     pf: PacketFilter,
-    vor_queue_size: usize
+    vor_queue_size: usize,
+    async_mode: bool,
 ) {
 
     // Bind UDP listening socket
@@ -207,7 +275,15 @@ pub fn route_main(
     let mut artc = Vec::new();
     //let mut indexer: i64 = 0;
 
-    //let async_rt = Runtime::new().unwrap();
+    /*
+        Create async runtime
+    */
+    let mut async_rt: Option<tokio::runtime::Runtime> = None;
+    let mut async_threads = vec![];
+    if async_mode {
+        async_rt = Some(tokio::runtime::Runtime::new().unwrap());
+    }
+
     let (bcst_tx, _bcst_rx) = broadcast::channel(vor_queue_size);
 
     for (app, id) in configs {
@@ -217,8 +293,14 @@ pub fn route_main(
 
         let app_stat_tx_at = app_stat_tx.clone();
         let bcst_app_rx = bcst_tx.subscribe();
-        //async_rt.spawn(route_app(bcst_app_rx, router_rx, app_stat_tx_at, indexer, app));
-        thread::spawn(move || route_app(bcst_app_rx, router_rx, app_stat_tx_at, id, app));
+        /*
+            Spawn app routers in the async runtime
+        */
+        if async_mode {
+            async_threads.push(async_rt.as_ref().unwrap().spawn(route_app_async(bcst_app_rx, router_rx, app_stat_tx_at, id, app)));
+        } else {
+            thread::spawn(move || route_app(bcst_app_rx, router_rx, app_stat_tx_at, id, app));
+        }
         //indexer += 1;
     }
     drop(_bcst_rx);// Dont need this rx
@@ -226,7 +308,7 @@ pub fn route_main(
     let (osc_parse_tx, osc_parse_rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
     //let sock_clone = vrc_sock.try_clone().unwrap();
     thread::spawn(move || {parse_vrc_osc(bcst_tx, osc_parse_rx, pf, vrc_sock);});
-    println!("[+] Started VRChat OSC Router.");
+    //println!("[+] Started VRChat OSC Router.");
 
     // Listen for GUI events
     loop {
@@ -238,16 +320,28 @@ pub fn route_main(
                 osc_parse_tx.send(true).unwrap();
 
                 //drop(vrc_sock);
-                println!("[*] Shutdown signal: OSC receive thread");
+                //println!("[*] Shutdown signal: OSC receive thread");
 
                 // Shutdown app route threads
                 for app_route_thread_channel in artc {
                     let _ = app_route_thread_channel.send(true);
                 }
-                println!("[*] Shutdown signal: Route threads");
+                //println!("[*] Shutdown signal: Route threads");
+
+                if async_mode {
+                    //println!("[*] Async runtime background shutdown.");
+
+                    for h in async_threads {
+                        h.abort();
+                        async_rt.as_ref().unwrap().spawn(
+                            async {let _ = h.await;}
+                        );
+                    }
+                    async_rt.unwrap().shutdown_background();
+                }
 
                 // Shutdown router thread last
-                println!("[*] Shutdown signal: Router thread");
+                //println!("[*] Shutdown signal: Router thread");
                 return;// Shutdown router thread.
             },
             //_ =>{},

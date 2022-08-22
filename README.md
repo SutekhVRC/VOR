@@ -1,6 +1,8 @@
 # VOR
-### Beta: Report bugs! Performance: (Will use about 7% CPU with one app. For app added, will go up about 6%-7%).
-### Working on adding an optimized mode, as the high CPU usage is intended for performance for my personal use case.
+### Beta: Report bugs!
+### Version 0.1.6-beta 
+- I have added an asynchronous routing mode that drastically improves efficiency of router execution threads.
+- Asynchronous option is in the config tab!
 ### Please report bugs!
 - Note that VOR is meant to be used to route OSC traffic that is RECEIVED from VRChat. All OSC apps can send to VRC on their own, but VRChat can only send to one port.
 
@@ -37,7 +39,18 @@
 - Whitelisting mode: Defaults to disallow all OSC addresses. Add OSC addresses to whilelist to allow it.
 - Blacklisting mode: Defaults to allow all OSC addresses. Add OSC addresses to blacklist to block it.
 
+## VOR Router Config
+
+### Networking
+- Bind Host: The host/interface to bind the VOR router OSC listener.
+- Bind Port: The port to bind the VOR router OSC listener.
+- VRChat Host: Not in use.
+- VRChat Port: Not in use.
+- VOR Buffer Queue Size: The route buffer size 4096 is default. (You dont want this to be too low because in high load situations it could cause packet loss)
+
+### Routing mode
+- Asynchronous routing: Default is enabled. Asynchronous routing enabled will drastically improve efficiency. I recommend using asynchronous mode. If you disable this you may get more responsive routing as the cost of higher CPU usage.
+
 ## Planned features sometime in the future :)
 
-### Asynchronous app route handling mode (For performance/efficiency.. smile)
 ### Update notifications
