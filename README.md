@@ -4,7 +4,7 @@
 
 ### Beta: Report bugs!
 ### Version 0.1.61-beta 
-- I have added an asynchronous routing mode that drastically improves efficiency of router execution threads.
+- I have added an asynchronous routing mode that drastically improves execution efficiency of router threads.
 - Asynchronous option is in the config tab!
 ### Please report bugs!
 - Note that VOR is meant to be used to route OSC traffic that is RECEIVED from VRChat. All OSC apps can send to VRC on their own, but VRChat can only send to one port.
