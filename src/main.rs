@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use eframe::NativeOptions;
 use eframe::egui::Vec2;
@@ -319,7 +319,7 @@ fn main() {
     //native_opts.max_window_size = Some(Vec2::new(400., 450.));
     //native_opts.min_window_size = Some(Vec2::new(330., 450.));
 
-    run_native(
-        Box::new(
-            VORGUI::new(args, configs, vor_router_config, pf)), native_opts);
+    run_native("VRChat OSC Router", native_opts,
+        Box::new(|cc| Box::new(
+            VORGUI::new(cc, args, configs, vor_router_config, pf))));
 }

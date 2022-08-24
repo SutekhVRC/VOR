@@ -1,7 +1,7 @@
-use eframe::egui::{ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Label, Style, TextStyle};
+use eframe::egui::{ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Label, Style, TextStyle, Visuals};
 use eframe::epaint::Color32;
 use std::sync::mpsc::{self, Sender, Receiver};
-use eframe::{epi::App, egui::{self, CentralPanel}};
+use eframe::{App, egui::{self, CentralPanel}};
 use std::{fs, thread};
 use crate::VCArgs;
 use crate::{
@@ -50,8 +50,14 @@ pub enum VORGUITab {
 
 impl VORGUI {
 
-    pub fn new(vc_args: VCArgs, configs: Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>, vor_router_config: RouterConfig, pf: PacketFilter) -> Self {
-        VORGUI {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        vc_args: VCArgs,
+        configs: Vec<(VORConfigWrapper,VORAppStatus, AppConfigState)>,
+        vor_router_config: RouterConfig,
+        pf: PacketFilter) -> Self {
+
+        let mut app_obj = VORGUI {
             configs,
             vc_args,
             running: false,
@@ -65,7 +71,22 @@ impl VORGUI {
             pf,
             pf_bl_new: (String::new(), false),
             pf_wl_new: (String::new(), false),
+        };
+
+                // Read config values
+        // Set fonts etc.
+        let mut style: Style = (*cc.egui_ctx.style()).clone();
+        style.override_text_style = Some(TextStyle::Monospace);
+        cc.egui_ctx.set_style(style);
+        let visuals = Visuals::dark();
+        cc.egui_ctx.set_visuals(visuals);
+
+        // Enable on start flag
+        if app_obj.vc_args.enable_on_start {
+            app_obj.start_router();
         }
+
+        return app_obj;
     }
 
     fn set_tab(&mut self, ctx: &Context) {
@@ -798,20 +819,8 @@ impl VORGUI {
 
 
 impl App for VORGUI {
-    fn setup(&mut self, ctx: &egui::Context, _frame: &eframe::epi::Frame, _storage: Option<&dyn eframe::epi::Storage>) {
-        // Read config values
-        // Set fonts etc.
-        let mut style: Style = (*ctx.style()).clone();
-        style.override_text_style = Some(TextStyle::Monospace);
-        ctx.set_style(style);
 
-        // Enable on start flag
-        if self.vc_args.enable_on_start {
-            self.start_router();
-        }
-    }
-
-    fn update(&mut self, ctx: &egui::Context, _frame: &eframe::epi::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.set_tab(&ctx);
         CentralPanel::default().show(ctx, |ui| {
             //ctx.request_repaint();
@@ -890,9 +899,5 @@ impl App for VORGUI {
             }
         });
         self.gui_footer(&ctx);
-    }
-
-    fn name(&self) -> &str {
-        "VRChat OSC Router"
     }
 }
