@@ -1,29 +1,23 @@
-use eframe::egui::{ScrollArea, Layout, RichText, TopBottomPanel, Hyperlink, Context, Label, Style, TextStyle, Visuals};
-use eframe::epaint::Color32;
-use std::sync::mpsc::{self, Sender, Receiver};
-use eframe::{App, egui::{self, CentralPanel}};
-use std::{fs, thread};
 use crate::VCArgs;
 use crate::{
-    routing::{
-        RouterConfig,
-        RouterMsg,
-        route_main,
-        PacketFilter,
+    config::{
+        AppConfigCheck, AppConfigState, AppConflicts, InputValidation, RouterConfig,
+        VORAppIdentifier, VORAppStatus, VORConfig, VORConfigWrapper,
     },
-    VORConfigWrapper,
-    VORAppStatus,
-    AppConfigState,
-    VORAppIdentifier,
-    VORConfig,
-    get_user_home_dir,
-    AppConfigCheck,
-    InputValidation,
-    AppConflicts,
-    check_valid_ipv4,
-    check_valid_port,
-    file_exists,
+    routing::{route_main, PacketFilter, RouterMsg},
+    vorutils::{check_valid_ipv4, check_valid_port, file_exists, get_user_home_dir},
 };
+use eframe::egui::{
+    Context, Hyperlink, Label, Layout, RichText, ScrollArea, Style, TextStyle, TopBottomPanel,
+    Visuals,
+};
+use eframe::epaint::Color32;
+use eframe::{
+    egui::{self, CentralPanel},
+    App,
+};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::{fs, thread};
 
 pub struct VORGUI {
     configs: Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>,
@@ -49,14 +43,13 @@ pub enum VORGUITab {
 }
 
 impl VORGUI {
-
     pub fn new(
         cc: &eframe::CreationContext<'_>,
         vc_args: VCArgs,
-        configs: Vec<(VORConfigWrapper,VORAppStatus, AppConfigState)>,
+        configs: Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>,
         vor_router_config: RouterConfig,
-        pf: PacketFilter) -> Self {
-
+        pf: PacketFilter,
+    ) -> Self {
         let mut app_obj = VORGUI {
             configs,
             vc_args,
@@ -73,7 +66,7 @@ impl VORGUI {
             pf_wl_new: (String::new(), false),
         };
 
-                // Read config values
+        // Read config values
         // Set fonts etc.
         let mut style: Style = (*cc.egui_ctx.style()).clone();
         style.override_text_style = Some(TextStyle::Monospace);
@@ -90,7 +83,6 @@ impl VORGUI {
     }
 
     fn set_tab(&mut self, ctx: &Context) {
-
         TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.with_layout(Layout::left_to_right(), |ui| {
@@ -99,7 +91,6 @@ impl VORGUI {
                             self.tab = VORGUITab::Main;
                         }
                         ui.separator();
-
 
                         if ui.button(RichText::new("Apps").monospace()).clicked() {
                             self.tab = VORGUITab::Apps;
@@ -132,11 +123,11 @@ impl VORGUI {
     }
 
     fn status_refresh(&mut self) {
-        let status = match self.router_msg_recvr.as_ref(){
-            Some(recvr) => {
-                match recvr.try_recv() {
-                    Ok(status) => status,
-                    Err(_e) => {return;},
+        let status = match self.router_msg_recvr.as_ref() {
+            Some(recvr) => match recvr.try_recv() {
+                Ok(status) => status,
+                Err(_e) => {
+                    return;
                 }
             },
             None => return,
@@ -149,7 +140,6 @@ impl VORGUI {
     }
 
     fn status(&mut self, ui: &mut egui::Ui) {
-
         //update vor status
         self.status_refresh();
 
@@ -159,17 +149,23 @@ impl VORGUI {
                 for i in 0..self.configs.len() {
                     let mut status_color = Color32::GREEN;
                     match self.configs[i].1 {
-                        VORAppStatus::Running => {},
-                        VORAppStatus::Stopped => {status_color = Color32::RED},
-                        VORAppStatus::AppError(_) => {status_color = Color32::GOLD},
-                        VORAppStatus::Disabled => {status_color = Color32::RED},
+                        VORAppStatus::Running => {}
+                        VORAppStatus::Stopped => status_color = Color32::RED,
+                        VORAppStatus::AppError(_) => status_color = Color32::GOLD,
+                        VORAppStatus::Disabled => status_color = Color32::RED,
                     }
                     ui.horizontal(|ui| {
                         ui.group(|ui| {
-                        ui.label(format!("{}", self.configs[i].0.config_data.app_name));
+                            ui.label(format!("{}", self.configs[i].0.config_data.app_name));
                             ui.with_layout(Layout::right_to_left(), |ui| {
                                 ui.separator();
-                                ui.add(Label::new(RichText::new(format!("{}", self.configs[i].1)).color(status_color)).wrap(true));
+                                ui.add(
+                                    Label::new(
+                                        RichText::new(format!("{}", self.configs[i].1))
+                                            .color(status_color),
+                                    )
+                                    .wrap(true),
+                                );
                             });
                         });
                     });
@@ -184,28 +180,45 @@ impl VORGUI {
         ui.label("Networking");
         ui.separator();
         ui.horizontal_wrapped(|ui| {
-            ui.label("Bind Host: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.bind_host));
+            ui.label("Bind Host: ");
+            ui.add(egui::TextEdit::singleline(
+                &mut self.vor_router_config.bind_host,
+            ));
         });
         ui.horizontal_wrapped(|ui| {
-            ui.label("Bind Port: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.bind_port));
+            ui.label("Bind Port: ");
+            ui.add(egui::TextEdit::singleline(
+                &mut self.vor_router_config.bind_port,
+            ));
         });
         ui.horizontal_wrapped(|ui| {
-            ui.label("VRChat Host: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vrc_host));
+            ui.label("VRChat Host: ");
+            ui.add(egui::TextEdit::singleline(
+                &mut self.vor_router_config.vrc_host,
+            ));
         });
         ui.horizontal_wrapped(|ui| {
-            ui.label("VRChat Port: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vrc_port));
+            ui.label("VRChat Port: ");
+            ui.add(egui::TextEdit::singleline(
+                &mut self.vor_router_config.vrc_port,
+            ));
         });
         ui.horizontal_wrapped(|ui| {
-            ui.label("VOR Buffer Queue Size: ");ui.add(egui::TextEdit::singleline(&mut self.vor_router_config.vor_buffer_size));
+            ui.label("VOR Buffer Queue Size: ");
+            ui.add(egui::TextEdit::singleline(
+                &mut self.vor_router_config.vor_buffer_size,
+            ));
         });
 
         ui.separator();
         ui.add_space(1.0);
         ui.label("Routing mode");
         ui.horizontal_wrapped(|ui| {
-            ui.checkbox(&mut self.vor_router_config.async_mode, "Asynchronous routing")
+            ui.checkbox(
+                &mut self.vor_router_config.async_mode,
+                "Asynchronous routing",
+            )
         });
-        
     }
 
     fn router_exec_button(&mut self, ui: &mut egui::Ui, ctx: &Context) {
@@ -227,22 +240,24 @@ impl VORGUI {
                 }*/
                 if self.running {
                     //ui.group(|ui| {
-                        if ui.button("Stop").clicked() {
-                            if self.running {
-                                self.stop_router();
-                                ctx.request_repaint();
-                            }
+                    if ui.button("Stop").clicked() {
+                        if self.running {
+                            self.stop_router();
+                            ctx.request_repaint();
                         }
+                    }
                     //});
                 } else {
                     //ui.group(|ui| {
-                        if ui.button(RichText::new("Start").color(Color32::GREEN)).clicked() {
-                            
-                            if !self.running {
-                                self.start_router();
-                                ctx.request_repaint();
-                            }
+                    if ui
+                        .button(RichText::new("Start").color(Color32::GREEN))
+                        .clicked()
+                    {
+                        if !self.running {
+                            self.start_router();
+                            ctx.request_repaint();
                         }
+                    }
                     //});
                 }
             });
@@ -252,27 +267,33 @@ impl VORGUI {
 
     fn start_router(&mut self) {
         // Create main router thread - 1 channel store TX in GUI object
-            // router thread recv msgs from GUI thread and controls child threads each with their own channel to comm with router thread
+        // router thread recv msgs from GUI thread and controls child threads each with their own channel to comm with router thread
         // Generate / Start OSC threads here
         let mut ids = -1;
-        let confs: Vec<(VORConfig, i64)> = self.configs.iter()
-        .filter_map(|c| {
-            if let VORAppStatus::Disabled = c.1 {
-                ids += 1;
-                None
-            } else {
-                ids += 1;
-                Some((c.0.config_data.clone(), ids))
-                
-            }
-        }).collect();
+        let confs: Vec<(VORConfig, i64)> = self
+            .configs
+            .iter()
+            .filter_map(|c| {
+                if let VORAppStatus::Disabled = c.1 {
+                    ids += 1;
+                    None
+                } else {
+                    ids += 1;
+                    Some((c.0.config_data.clone(), ids))
+                }
+            })
+            .collect();
 
         let (router_tx, router_rx): (Sender<RouterMsg>, Receiver<RouterMsg>) = mpsc::channel();
-        let (app_stat_tx, app_stat_rx): (Sender<VORAppIdentifier>, Receiver<VORAppIdentifier>) = mpsc::channel();
+        let (app_stat_tx, app_stat_rx): (Sender<VORAppIdentifier>, Receiver<VORAppIdentifier>) =
+            mpsc::channel();
         self.router_channel = Some(router_tx);
         self.router_msg_recvr = Some(app_stat_rx);
 
-        let bind_target = format!("{}:{}", self.vor_router_config.bind_host, self.vor_router_config.bind_port);
+        let bind_target = format!(
+            "{}:{}",
+            self.vor_router_config.bind_host, self.vor_router_config.bind_port
+        );
         let vor_buf_size = match self.vor_router_config.vor_buffer_size.parse::<usize>() {
             Ok(s) => s,
             Err(_) => {
@@ -285,7 +306,15 @@ impl VORGUI {
         let pf = self.pf.clone();
         let async_mode = self.vor_router_config.async_mode;
         thread::spawn(move || {
-            route_main(bind_target, router_rx, app_stat_tx, confs, pf, vor_buf_size, async_mode);
+            route_main(
+                bind_target,
+                router_rx,
+                app_stat_tx,
+                confs,
+                pf,
+                vor_buf_size,
+                async_mode,
+            );
         });
 
         self.running = true;
@@ -293,7 +322,11 @@ impl VORGUI {
 
     fn stop_router(&mut self) {
         // Send shutdown signal to OSC threads here
-        self.router_channel.take().unwrap().send(RouterMsg::ShutdownAll).unwrap();
+        self.router_channel
+            .take()
+            .unwrap()
+            .send(RouterMsg::ShutdownAll)
+            .unwrap();
         //self.router_msg_recvr = None;
         self.running = false;
 
@@ -307,46 +340,48 @@ impl VORGUI {
     }
 
     fn save_vor_config(&mut self) {
-        fs::write(format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORConfig.json", get_user_home_dir()), serde_json::to_string(&self.vor_router_config).unwrap()).unwrap();
+        fs::write(
+            format!(
+                "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORConfig.json",
+                get_user_home_dir()
+            ),
+            serde_json::to_string(&self.vor_router_config).unwrap(),
+        )
+        .unwrap();
     }
 
     fn save_app_config(&mut self, app_index: usize, add_new: bool) -> AppConfigCheck {
-
         match self.check_app_inputs(app_index) {
-            InputValidation::CLEAN => {},
+            InputValidation::CLEAN => {}
             InputValidation::AH(s) => {
                 if add_new {
                     self.configs.pop();
                 }
                 return AppConfigCheck::IV(InputValidation::AH(s));
-            },
+            }
             InputValidation::AP(s) => {
-                
                 if add_new {
                     self.configs.pop();
                 }
                 return AppConfigCheck::IV(InputValidation::AP(s));
-            },
+            }
             InputValidation::BH(s) => {
-                
                 if add_new {
                     self.configs.pop();
                 }
                 return AppConfigCheck::IV(InputValidation::BH(s));
-            },
+            }
             InputValidation::BP(s) => {
-
                 if add_new {
                     self.configs.pop();
                 }
                 return AppConfigCheck::IV(InputValidation::BP(s));
-            },
+            }
         }
 
         match self.check_app_conflicts(app_index) {
-            AppConflicts::NONE => {},
+            AppConflicts::NONE => {}
             AppConflicts::CONFLICT((app, con_component)) => {
-                
                 if add_new {
                     self.configs.pop();
                 }
@@ -355,30 +390,48 @@ impl VORGUI {
         }
 
         let _ = fs::remove_file(&self.configs[app_index].0.config_path);
-        self.configs[app_index].0.config_path = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VorAppConfigs\\{}.json", get_user_home_dir(), self.configs[app_index].0.config_data.app_name);
-        fs::write(&self.configs[app_index].0.config_path, serde_json::to_string(&self.configs[app_index].0.config_data).unwrap()).unwrap();
+        self.configs[app_index].0.config_path = format!(
+            "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VorAppConfigs\\{}.json",
+            get_user_home_dir(),
+            self.configs[app_index].0.config_data.app_name
+        );
+        fs::write(
+            &self.configs[app_index].0.config_path,
+            serde_json::to_string(&self.configs[app_index].0.config_data).unwrap(),
+        )
+        .unwrap();
 
         return AppConfigCheck::SUCCESS;
     }
 
     fn check_app_conflicts(&mut self, app_index: usize) -> AppConflicts {
-
         for i in 0..self.configs.len() {
             if i != app_index {
-                
-                if self.configs[i].0.config_data.app_name == self.configs[app_index].0.config_data.app_name {
-                    return AppConflicts::CONFLICT((self.configs[i].0.config_data.app_name.clone(), "App Name".to_string()))
+                if self.configs[i].0.config_data.app_name
+                    == self.configs[app_index].0.config_data.app_name
+                {
+                    return AppConflicts::CONFLICT((
+                        self.configs[i].0.config_data.app_name.clone(),
+                        "App Name".to_string(),
+                    ));
                 }
                 /*
                 if self.configs[i].0.config_data.bind_host == self.configs[app_index].0.config_data.bind_host {
                     return AppConflicts::CONFLICT((self.configs[app_index].0.config_data.app_name.clone(), "Bind Host".to_string()))
                 }*/
-                if self.configs[i].0.config_data.bind_port == self.configs[app_index].0.config_data.bind_port {
-                    return AppConflicts::CONFLICT((self.configs[i].0.config_data.app_name.clone(), "Bind Port".to_string()))
+                if self.configs[i].0.config_data.bind_port
+                    == self.configs[app_index].0.config_data.bind_port
+                {
+                    return AppConflicts::CONFLICT((
+                        self.configs[i].0.config_data.app_name.clone(),
+                        "Bind Port".to_string(),
+                    ));
                 }
 
-                if self.configs[app_index].0.config_data.bind_port == self.vor_router_config.bind_port {
-                    return AppConflicts::CONFLICT(("VOR".to_string(), "Bind Port".to_string()))
+                if self.configs[app_index].0.config_data.bind_port
+                    == self.vor_router_config.bind_port
+                {
+                    return AppConflicts::CONFLICT(("VOR".to_string(), "Bind Port".to_string()));
                 }
                 /*
                 if self.configs[i].0.config_data.app_host == self.configs[app_index].0.config_data.app_host {
@@ -395,7 +448,6 @@ impl VORGUI {
     }
 
     fn check_app_inputs(&mut self, app_index: usize) -> InputValidation {
-
         if !check_valid_ipv4(&self.configs[app_index].0.config_data.app_host) {
             return InputValidation::AH(false);
         }
@@ -416,7 +468,6 @@ impl VORGUI {
     }
 
     fn add_app(&mut self, ui: &mut egui::Ui) {
-
         ui.group(|ui| {
             if self.adding_new_app {
                 ui.label("App Name");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_name));
@@ -462,9 +513,8 @@ impl VORGUI {
                                             self.new_app_cf_exists_err = AppConfigCheck::SUCCESS;
                                         }
                                     }
-                                } else {
-                                    
-                                    //println!("[!] Config conflict!");
+                                } else {//println!("[!] Config conflict!");
+
                                     if self.vor_router_config.bind_port == self.new_app.as_ref().unwrap().config_data.bind_port {
                                         self.new_app_cf_exists_err = AppConfigCheck::AC(AppConflicts::CONFLICT((self.new_app.as_ref().unwrap().config_data.bind_port.clone(), "VOR bind port conflict".to_string())));
                                     } else {
@@ -507,12 +557,20 @@ impl VORGUI {
     }
 
     fn gui_footer(&mut self, ctx: &Context) {
-        TopBottomPanel::bottom("footer").show(ctx, |ui|{
+        TopBottomPanel::bottom("footer").show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(5.0);
-                ui.add(Hyperlink::from_label_and_url("VOR","https://github.com/SutekhVRC/VOR"));
+                ui.add(Hyperlink::from_label_and_url(
+                    "VOR",
+                    "https://github.com/SutekhVRC/VOR",
+                ));
                 ui.label("0.1.62-beta");
-                ui.add(Hyperlink::from_label_and_url(RichText::new("Made by Sutekh").monospace().color(Color32::WHITE),"https://github.com/SutekhVRC"));
+                ui.add(Hyperlink::from_label_and_url(
+                    RichText::new("Made by Sutekh")
+                        .monospace()
+                        .color(Color32::WHITE),
+                    "https://github.com/SutekhVRC",
+                ));
                 ui.add_space(5.0);
             });
         });
@@ -588,16 +646,15 @@ impl VORGUI {
                         });
                     },
                     AppConfigState::SAVED => {
-                            
+
                         ui.horizontal(|ui| {
                             ui.label(self.configs[i].0.config_data.app_name.as_str());
-    
+
                             ui.with_layout(Layout::right_to_left(), |ui| {
                                 //if !self.running {
                                 match &self.configs[i].1 {
                                     VORAppStatus::Running => {
                                         ui.colored_label(Color32::RED, "Locked");
-                                        
                                     },
                                     VORAppStatus::Stopped | VORAppStatus::Disabled => {
                                         if ui.button(RichText::new("-").color(Color32::RED).monospace()).clicked() {
@@ -627,7 +684,7 @@ impl VORGUI {
                     },
                 }
             });
-        }// For list
+        } // For list
     }
 
     fn pf_buttons(&mut self, ui: &mut egui::Ui) {
@@ -644,14 +701,18 @@ impl VORGUI {
     }
 
     fn save_pf_config(&mut self) {
-        fs::write(format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VOR_PF.json", get_user_home_dir()),
-        serde_json::to_string(&self.pf).unwrap()
-        ).unwrap();
+        fs::write(
+            format!(
+                "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VOR_PF.json",
+                get_user_home_dir()
+            ),
+            serde_json::to_string(&self.pf).unwrap(),
+        )
+        .unwrap();
     }
 
     fn pf_whitelist(&mut self, ui: &mut egui::Ui) {
         if self.pf.wl_enabled {
-
             let wl_add_count = self.pf.address_wl.len();
 
             if wl_add_count >= 1 {
@@ -661,8 +722,10 @@ impl VORGUI {
                             ui.group(|ui| {
                                 ui.label(egui::RichText::new(&self.pf.address_wl[i].0).monospace());
                                 ui.with_layout(Layout::right_to_left(), |ui| {
-                                    
-                                    if ui.button(RichText::new("-").monospace().color(Color32::RED)).clicked() {
+                                    if ui
+                                        .button(RichText::new("-").monospace().color(Color32::RED))
+                                        .clicked()
+                                    {
                                         self.pf.address_wl.remove(i);
                                     }
 
@@ -672,13 +735,11 @@ impl VORGUI {
                                 });
                             });
                         });
-
-                    } else {//edit entry
+                    } else {
+                        //edit entry
                         ui.horizontal_wrapped(|ui| {
                             ui.group(|ui| {
-
                                 ui.with_layout(Layout::right_to_left(), |ui| {
-
                                     if ui.button("Save").clicked() {
                                         // Save to file
                                         self.pf.address_wl[i].1 = false;
@@ -701,7 +762,10 @@ impl VORGUI {
                 ui.group(|ui| {
                     ui.label("New filter");
                     ui.with_layout(Layout::right_to_left(), |ui| {
-                        if ui.button(RichText::new("+").color(Color32::GREEN)).clicked() {
+                        if ui
+                            .button(RichText::new("+").color(Color32::GREEN))
+                            .clicked()
+                        {
                             //self.pf.wl_editing = true;
                             self.save_pf_config();
                             self.pf_wl_new.1 = true;
@@ -709,14 +773,15 @@ impl VORGUI {
                     });
                 });
             });
-        } else {// if adding
+        } else {
+            // if adding
 
             ui.horizontal_wrapped(|ui| {
-                ui.label("Filter: ");ui.text_edit_singleline(&mut self.pf_wl_new.0);
+                ui.label("Filter: ");
+                ui.text_edit_singleline(&mut self.pf_wl_new.0);
             });
             ui.horizontal(|ui| {
                 ui.with_layout(Layout::right_to_left(), |ui| {
-
                     if ui.button("Cancel").clicked() {
                         self.pf_wl_new.1 = false;
                         self.pf_wl_new.0.clear();
@@ -734,20 +799,19 @@ impl VORGUI {
 
     fn pf_blacklist(&mut self, ui: &mut egui::Ui) {
         if self.pf.bl_enabled {
-
-
             let bl_add_count = self.pf.address_bl.len();
 
             if bl_add_count >= 1 {
-                
                 for i in 0..bl_add_count {
                     if !self.pf.address_bl[i].1 {
                         ui.horizontal(|ui| {
                             ui.group(|ui| {
                                 ui.label(egui::RichText::new(&self.pf.address_bl[i].0).monospace());
                                 ui.with_layout(Layout::right_to_left(), |ui| {
-                                    
-                                    if ui.button(RichText::new("-").monospace().color(Color32::RED)).clicked() {
+                                    if ui
+                                        .button(RichText::new("-").monospace().color(Color32::RED))
+                                        .clicked()
+                                    {
                                         self.pf.address_bl.remove(i);
                                     }
 
@@ -757,13 +821,11 @@ impl VORGUI {
                                 });
                             });
                         });
-
-                    } else {//edit entry
+                    } else {
+                        //edit entry
                         ui.horizontal_wrapped(|ui| {
                             ui.group(|ui| {
-
                                 ui.with_layout(Layout::right_to_left(), |ui| {
-
                                     if ui.button("Save").clicked() {
                                         // Save to file
                                         self.pf.address_bl[i].1 = false;
@@ -786,21 +848,25 @@ impl VORGUI {
                 ui.group(|ui| {
                     ui.label("New filter");
                     ui.with_layout(Layout::right_to_left(), |ui| {
-                        if ui.button(RichText::new("+").color(Color32::GREEN)).clicked() {
+                        if ui
+                            .button(RichText::new("+").color(Color32::GREEN))
+                            .clicked()
+                        {
                             //self.pf.wl_editing = true;
                             self.pf_bl_new.1 = true;
                         }
                     });
                 });
             });
-        } else {// if adding
+        } else {
+            // if adding
 
             ui.horizontal_wrapped(|ui| {
-                ui.label("Entry: ");ui.text_edit_singleline(&mut self.pf_bl_new.0);
+                ui.label("Entry: ");
+                ui.text_edit_singleline(&mut self.pf_bl_new.0);
             });
             ui.horizontal(|ui| {
                 ui.with_layout(Layout::right_to_left(), |ui| {
-
                     if ui.button("Cancel").clicked() {
                         self.pf_bl_new.1 = false;
                         self.pf_bl_new.0.clear();
@@ -810,16 +876,13 @@ impl VORGUI {
                         self.pf.address_bl.push(self.pf_bl_new.clone());
                         self.pf_bl_new.0.clear();
                     }
-
                 });
             });
         }
     }
-}// impl VORGUI
-
+} // impl VORGUI
 
 impl App for VORGUI {
-
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.set_tab(&ctx);
         CentralPanel::default().show(ctx, |ui| {
@@ -833,13 +896,12 @@ impl App for VORGUI {
                         ui.add(egui::Label::new("VOR Main"));
                         self.router_exec_button(ui, &ctx);
                     });
-                    
+
                     ui.separator();
 
                     self.status(ui);
                     ui.add_space(60.);
-
-                },
+                }
                 VORGUITab::Apps => {
                     ui.add(egui::Label::new("VOR App Configs"));
                     ui.separator();
@@ -848,10 +910,9 @@ impl App for VORGUI {
                         self.add_app(ui);
                         ui.add_space(60.);
                     });
-                },
+                }
                 VORGUITab::Firewall => {
                     ui.horizontal(|ui| {
-
                         ui.checkbox(&mut self.pf.enabled, "OSC Packet Filter");
                         ui.with_layout(Layout::right_to_left(), |ui| {
                             if ui.button("Save").clicked() {
@@ -864,27 +925,25 @@ impl App for VORGUI {
                     self.pf_buttons(ui);
                     if self.pf.enabled {
                         ui.separator();
-                        
-                            if self.pf.wl_enabled {
-                                ui.label(RichText::new("Whitelist"));
-                                ScrollArea::new([false, true]).show(ui, |ui| {
-                                    self.pf_whitelist(ui);
-                                    self.add_pf_wl(ui);
-                                    ui.add_space(60.);
-                                });
-                            } else if self.pf.bl_enabled {
-                                ui.label(RichText::new("Blacklist"));
-                                ScrollArea::new([false, true]).show(ui, |ui| {
-                                    self.pf_blacklist(ui);
-                                    self.add_pf_bl(ui);
-                                    ui.add_space(60.);
-                                });
-                            }
 
+                        if self.pf.wl_enabled {
+                            ui.label(RichText::new("Whitelist"));
+                            ScrollArea::new([false, true]).show(ui, |ui| {
+                                self.pf_whitelist(ui);
+                                self.add_pf_wl(ui);
+                                ui.add_space(60.);
+                            });
+                        } else if self.pf.bl_enabled {
+                            ui.label(RichText::new("Blacklist"));
+                            ScrollArea::new([false, true]).show(ui, |ui| {
+                                self.pf_blacklist(ui);
+                                self.add_pf_bl(ui);
+                                ui.add_space(60.);
+                            });
+                        }
                     }
-                },
+                }
                 VORGUITab::Config => {
-
                     ui.horizontal_wrapped(|ui| {
                         ui.add(egui::Label::new("VOR Config"));
                         ui.with_layout(Layout::right_to_left(), |ui| {
@@ -895,7 +954,7 @@ impl App for VORGUI {
                     });
                     ui.separator();
                     self.list_vor_config(ui);
-                },
+                }
             }
         });
         self.gui_footer(&ctx);
