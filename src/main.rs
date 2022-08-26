@@ -8,6 +8,7 @@ mod config;
 mod routing;
 mod ui;
 mod vorerr;
+mod vorupdate;
 mod vorutils;
 
 use config::config_construct;
@@ -25,7 +26,6 @@ fn parse_args() -> VCArgs {
 }
 
 fn main() {
-
     let args = parse_args();
     //println!("Enable On Start: {}", args.enable_on_start);
     let (vor_router_config, configs, pf) = config_construct();

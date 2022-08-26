@@ -5,6 +5,7 @@ use crate::{
         VORAppIdentifier, VORAppStatus, VORConfig, VORConfigWrapper,
     },
     routing::{route_main, PacketFilter, RouterMsg},
+    vorupdate::{VORUpdater, VERSION},
     vorutils::{check_valid_ipv4, check_valid_port, file_exists, get_user_home_dir},
 };
 use eframe::egui::{
@@ -33,6 +34,7 @@ pub struct VORGUI {
     pf: PacketFilter,
     pf_wl_new: (String, bool),
     pf_bl_new: (String, bool),
+    update_engine: VORUpdater,
 }
 
 pub enum VORGUITab {
@@ -64,6 +66,7 @@ impl VORGUI {
             pf,
             pf_bl_new: (String::new(), false),
             pf_wl_new: (String::new(), false),
+            update_engine: VORUpdater::new(),
         };
 
         // Read config values
@@ -80,6 +83,19 @@ impl VORGUI {
         }
 
         return app_obj;
+    }
+
+    fn update_vor(&mut self) {
+        if self.running {
+            self.stop_router();
+        }
+        let blob = self.update_engine.release_blob.take().unwrap();
+
+        thread::spawn(move || {
+            VORUpdater::update_vor(blob);
+        });
+        thread::sleep(std::time::Duration::from_secs(1));
+        std::process::exit(0);
     }
 
     fn set_tab(&mut self, ctx: &Context) {
@@ -112,6 +128,17 @@ impl VORGUI {
                                 ui.label(RichText::new("Routing").color(Color32::GREEN));
                             } else {
                                 ui.label(RichText::new("Stopped").color(Color32::RED));
+                            }
+                            if !self.update_engine.up_to_date {
+                                if ui
+                                    .button(
+                                        RichText::new("Update").color(Color32::GREEN).monospace(),
+                                    )
+                                    .clicked()
+                                {
+                                    self.update_vor();
+                                    std::thread::sleep(std::time::Duration::from_secs(5));
+                                }
                             }
                         });
                         //ui.separator();
@@ -564,7 +591,7 @@ impl VORGUI {
                     "VOR",
                     "https://github.com/SutekhVRC/VOR",
                 ));
-                ui.label("0.1.62-beta");
+                ui.label(VERSION);
                 ui.add(Hyperlink::from_label_and_url(
                     RichText::new("Made by Sutekh")
                         .monospace()
