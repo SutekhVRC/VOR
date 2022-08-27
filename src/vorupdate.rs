@@ -1,5 +1,6 @@
 use reqwest::{self, StatusCode};
 use serde_json::Value;
+use open;
 use std::process::Command;
 
 #[cfg(target_os = "windows")]
