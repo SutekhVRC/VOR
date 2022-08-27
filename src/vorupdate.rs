@@ -12,10 +12,10 @@ use std::os::windows::process::CommandExt;
 pub const DETACHED_PROCESS: u32 = 0x00000008;
 
 #[cfg(target_os = "windows")]
-pub const VERSION: &str = "0.2.1-beta-windows";
+pub const VERSION: &str = "0.2.3-beta-windows";
 
 #[cfg(target_os = "linux")]
-pub const VERSION: &str = "0.2.1-beta-linux";
+pub const VERSION: &str = "0.2.3-beta-linux";
 
 pub struct VORVersion {
     pub version_str: String,
