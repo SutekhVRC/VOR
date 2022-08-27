@@ -4,6 +4,10 @@
 
 ### Beta: Report bugs!
 
+### Supported Platforms
+- Windows (.msi)
+- Linux (.elf)
+
 ### Version 0.2.4-beta
 - Windows and Linux builds
 - Update button that shows when out of date
