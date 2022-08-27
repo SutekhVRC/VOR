@@ -368,14 +368,30 @@ impl VORGUI {
     }
 
     fn save_vor_config(&mut self) {
-        fs::write(
-            format!(
-                "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORConfig.json",
-                get_user_home_dir()
-            ),
-            serde_json::to_string(&self.vor_router_config).unwrap(),
-        )
-        .unwrap();
+
+        #[cfg(target_os = "windows")]
+        {
+            fs::write(
+                format!(
+                    "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORConfig.json",
+                    get_user_home_dir()
+                ),
+                serde_json::to_string(&self.vor_router_config).unwrap(),
+            )
+            .unwrap();
+        }
+        
+        #[cfg(target_os = "linux")]
+        {
+            fs::write(
+                format!(
+                    "{}/.vor/VORConfig.json",
+                    get_user_home_dir()
+                ),
+                serde_json::to_string(&self.vor_router_config).unwrap(),
+            )
+            .unwrap();
+        }
     }
 
     fn save_app_config(&mut self, app_index: usize, add_new: bool) -> AppConfigCheck {
@@ -418,11 +434,25 @@ impl VORGUI {
         }
 
         let _ = fs::remove_file(&self.configs[app_index].0.config_path);
-        self.configs[app_index].0.config_path = format!(
-            "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VorAppConfigs\\{}.json",
-            get_user_home_dir(),
-            self.configs[app_index].0.config_data.app_name
-        );
+
+        #[cfg(target_os = "windows")]
+        {
+            self.configs[app_index].0.config_path = format!(
+                "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VorAppConfigs\\{}.json",
+                get_user_home_dir(),
+                self.configs[app_index].0.config_data.app_name
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            self.configs[app_index].0.config_path = format!(
+                "{}/.vor/VorAppConfigs/{}.json",
+                get_user_home_dir(),
+                self.configs[app_index].0.config_data.app_name
+            );
+        }
+
         fs::write(
             &self.configs[app_index].0.config_path,
             serde_json::to_string(&self.configs[app_index].0.config_data).unwrap(),
@@ -523,7 +553,18 @@ impl VORGUI {
                                 self.new_app_cf_exists_err = AppConfigCheck::SUCCESS;
                             }
                             if ui.button(RichText::new("Add")).clicked() {
-                                self.new_app.as_mut().unwrap().config_path = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs\\{}.json", get_user_home_dir(), self.new_app.as_ref().unwrap().config_data.app_name);
+
+                                #[cfg(target_os = "windows")]
+                                {
+                                    self.new_app.as_mut().unwrap().config_path = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs\\{}.json", get_user_home_dir(), self.new_app.as_ref().unwrap().config_data.app_name);
+                                }
+
+                                #[cfg(target_os = "linux")]
+                                {
+                                    self.new_app.as_mut().unwrap().config_path = format!("{}/.vor/VORAppConfigs/{}.json", get_user_home_dir(), self.new_app.as_ref().unwrap().config_data.app_name);
+                                }
+
+                                
                                 if !file_exists(&self.new_app.as_ref().unwrap().config_path) && self.vor_router_config.bind_port != self.new_app.as_ref().unwrap().config_data.bind_port {
                                     self.configs.push((self.new_app.as_ref().unwrap().clone(), VORAppStatus::Stopped, AppConfigState::SAVED));
 
@@ -729,14 +770,30 @@ impl VORGUI {
     }
 
     fn save_pf_config(&mut self) {
-        fs::write(
-            format!(
-                "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VOR_PF.json",
-                get_user_home_dir()
-            ),
-            serde_json::to_string(&self.pf).unwrap(),
-        )
-        .unwrap();
+        
+        #[cfg(target_os = "windows")]
+        {
+            fs::write(
+                format!(
+                    "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VOR_PF.json",
+                    get_user_home_dir()
+                ),
+                serde_json::to_string(&self.pf).unwrap(),
+            )
+            .unwrap();
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            fs::write(
+                format!(
+                    "{}/.vor/VOR_PF.json",
+                    get_user_home_dir()
+                ),
+                serde_json::to_string(&self.pf).unwrap(),
+            )
+            .unwrap();
+        }
     }
 
     fn pf_whitelist(&mut self, ui: &mut egui::Ui) {
