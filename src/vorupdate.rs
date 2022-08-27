@@ -1,10 +1,18 @@
 use reqwest::{self, StatusCode};
 use serde_json::Value;
-use std::os::windows::process::CommandExt;
 use std::process::Command;
 
-const DETACHED_PROCESS: u32 = 0x00000008;
-pub const VERSION: &str = "0.2.0-beta";
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+pub const DETACHED_PROCESS: u32 = 0x00000008;
+
+#[cfg(target_os = "windows")]
+pub const VERSION: &str = "0.2.1-beta-windows";
+
+#[cfg(target_os = "linux")]
+pub const VERSION: &str = "0.2.1-beta-linux";
 
 pub struct VORVersion {
     pub version_str: String,
@@ -41,23 +49,38 @@ impl VORUpdater {
         vu
     }
 
+    #[cfg(target_os = "linux")]
     pub fn update_vor(blob: Value) {
-        //println!("BLOB: {:?}", blob);
-
-        let msi_download_url = blob.as_array().unwrap()[0]
+        let assets: &Vec<Value> = blob.as_array().unwrap()[0]
             .get("assets")
             .unwrap()
             .as_array()
-            .unwrap()[0]
-            .get("browser_download_url")
-            .unwrap()
-            .as_str()
             .unwrap();
+        for asset in assets {
+            let dl_url = asset.get("browser_download_url").unwrap().as_str().unwrap();
+            if dl_url.ends_with(".elf") {
+                open::that(dl_url).unwrap();
+            }
+        }
+    }
 
-        let _ = Command::new("msiexec")
-            .args(["/i", msi_download_url, "/n", "/passive"])
-            .creation_flags(DETACHED_PROCESS)
-            .spawn();
+    #[cfg(target_os = "windows")]
+    pub fn update_vor(blob: Value) {
+        let assets: &Vec<Value> = blob.as_array().unwrap()[0]
+            .get("assets")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        for asset in assets {
+            let dl_url = asset.get("browser_download_url").unwrap().as_str().unwrap();
+            if dl_url.ends_with(".msi") {
+                Command::new("msiexec")
+                    .args(["/i", dl_url, "/n", "/passive"])
+                    .creation_flags(DETACHED_PROCESS)
+                    .spawn()
+                    .unwrap();
+            }
+        }
     }
 
     fn up_to_date(&mut self) {
@@ -114,26 +137,27 @@ impl VORUpdater {
 
     fn parse_vor_version_from_str(version: &str) -> Option<VORVersion> {
         let release_split: Vec<&str> = version.split("-").into_iter().collect();
-        //println!("REL SPLIT: {:?}", release_split);
         let version_split: Vec<&str> = release_split[0].split(".").into_iter().collect();
-        //println!("VER SPLIT: {:?}", version_split);
 
-        let mut new_version = VORVersion {
-            version_str: version.to_string(),
+        let mut version_parse = VORVersion {
+            version_str: String::new(),
             major: 0,
             minor: 0,
             patch: 0,
         };
 
         if version_split.len() == 3 {
-            new_version.major = version_split[0].parse().unwrap_or(0);
-            new_version.minor = version_split[1].parse().unwrap_or(0);
-            new_version.patch = version_split[2].parse().unwrap_or(0);
-            if (new_version.major + new_version.minor + new_version.patch) == 0 {
+            version_parse.major = version_split[0].parse().unwrap_or(0);
+            version_parse.minor = version_split[1].parse().unwrap_or(0);
+            version_parse.patch = version_split[2].parse().unwrap_or(0);
+
+            if (version_parse.major + version_parse.minor + version_parse.patch) == 0 {
                 return None;
             }
-            new_version.version_str = version.to_string();
-            return Some(new_version);
+
+            version_parse.version_str = release_split[0].to_string();
+
+            return Some(version_parse);
         } else {
             return None;
         }

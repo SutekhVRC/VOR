@@ -8,6 +8,7 @@ use crate::{
     vorupdate::{VORUpdater, VERSION},
     vorutils::{check_valid_ipv4, check_valid_port, file_exists, get_user_home_dir},
 };
+
 use eframe::egui::{
     Context, Hyperlink, Label, Layout, RichText, ScrollArea, Style, TextStyle, TopBottomPanel,
     Visuals,

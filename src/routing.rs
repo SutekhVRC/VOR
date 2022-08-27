@@ -296,13 +296,12 @@ pub fn route_main(
             return;
         }
     };
+
     // Setting this socket to timed blocking does not have a dramatic effect on message passing delays due to socket blocking
-    //(half ass'd performance patch for now until I want to work on this project again lol)
     vrc_sock.set_nonblocking(false).unwrap();
     let _ = vrc_sock.set_read_timeout(Some(std::time::Duration::from_secs(1)));
 
     let mut artc = Vec::new();
-    //let mut indexer: i64 = 0;
 
     /*
         Create async runtime
@@ -335,12 +334,11 @@ pub fn route_main(
         } else {
             thread::spawn(move || route_app(bcst_app_rx, router_rx, app_stat_tx_at, id, app));
         }
-        //indexer += 1;
     }
     drop(_bcst_rx); // Dont need this rx
 
     let (osc_parse_tx, osc_parse_rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
-    //let sock_clone = vrc_sock.try_clone().unwrap();
+
     thread::spawn(move || {
         parse_vrc_osc(bcst_tx, osc_parse_rx, pf, vrc_sock);
     });

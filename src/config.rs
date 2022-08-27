@@ -119,22 +119,33 @@ impl fmt::Display for InputValidation {
 
 fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>, PacketFilter) {
     let mut configs = Vec::<VORConfigWrapper>::new();
+
+    #[cfg(target_os = "linux")]
+    let vor_root_dir = format!("{}/.vor", get_user_home_dir());
+
+    #[cfg(target_os = "windows")]
     let vor_root_dir = format!(
         "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR",
         get_user_home_dir()
     );
-    let vor_config_file = format!(
-        "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORConfig.json",
-        get_user_home_dir()
-    );
-    let vor_app_configs_dir = format!(
-        "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs",
-        get_user_home_dir()
-    );
-    let vor_pf_config_file = format!(
-        "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VOR_PF.json",
-        get_user_home_dir()
-    );
+
+    let vor_config_file;
+    let vor_app_configs_dir;
+    let vor_pf_config_file;
+
+    #[cfg(target_os = "windows")]
+    {
+        vor_config_file = format!("{}\\VORConfig.json", vor_root_dir);
+        vor_app_configs_dir = format!("{}\\VORAppConfigs", vor_root_dir);
+        vor_pf_config_file = format!("{}\\VOR_PF.json", vor_root_dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        vor_config_file = format!("{}/VORConfig.json", vor_root_dir);
+        vor_app_configs_dir = format!("{}/VORAppConfigs", vor_root_dir);
+        vor_pf_config_file = format!("{}/VOR_PF.json", vor_root_dir);
+    }
 
     //If vor & vor config folder doesnt exist make it
     if !path_exists(&vor_root_dir) {
