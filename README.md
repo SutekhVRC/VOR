@@ -4,7 +4,7 @@
 
 ### Beta: Report bugs!
 
-### Version 0.2.3-beta
+### Version 0.2.4-beta
 - Windows and Linux builds
 - Update button that shows when out of date
 - Bug fixes
