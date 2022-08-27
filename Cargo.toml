@@ -13,4 +13,6 @@ directories = "4.0.1"
 tokio = {version = "1.20.0", features = ["sync", "rt-multi-thread", "net"]}
 clap = {version = "3.1.17", features = ["derive"]}
 reqwest = {version = "0.11.11", features = ["blocking"]}
+
+[target.'cfg(linux)'.dependencies]
 open = "3.0.2"
