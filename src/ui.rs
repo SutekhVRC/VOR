@@ -438,7 +438,7 @@ impl VORGUI {
         #[cfg(target_os = "windows")]
         {
             self.configs[app_index].0.config_path = format!(
-                "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VorAppConfigs\\{}.json",
+                "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs\\{}.json",
                 get_user_home_dir(),
                 self.configs[app_index].0.config_data.app_name
             );
@@ -447,7 +447,7 @@ impl VORGUI {
         #[cfg(target_os = "linux")]
         {
             self.configs[app_index].0.config_path = format!(
-                "{}/.vor/VorAppConfigs/{}.json",
+                "{}/.vor/VORAppConfigs/{}.json",
                 get_user_home_dir(),
                 self.configs[app_index].0.config_data.app_name
             );
