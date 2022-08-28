@@ -33,19 +33,30 @@
 1. Once VOR is opened go to the "Apps" tab. This is where you can add "apps". An app is basically a route to send to.
 
 2. To add an app click the plus to the right of "Add new VOR app"
+
 ![Add App](./images/add_app1.png)
 
 3. 
     - App Name(must be unique from other apps): Put an app identifier here VibeCheck/RemiOSC/etc.
-    ![App Name](./images/add_app_name.png)
+
+![App Name](./images/add_app_name.png)
+    
     - App Host: This is the host that VOR will route the traffic FROM VRChat TO your app (Whatever host your app is listening on).
-    ![App Host](./images/add_app_host.png)
+    
+![App Host](./images/add_app_host.png)
+    
     - App Port: The port your app is listening on.
-    ![App Port](./images/add_app_port.png)
+    
+![App Port](./images/add_app_port.png)
+    
     - Bind Host: The host/interface to bind the route UDP socket to (This will probably ALWAYS be 127.0.0.1).
-    ![Route Bind Host](./images/add_app_bind_host.png)
+    
+![Route Bind Host](./images/add_app_bind_host.png)
+    
     - Bind Port: The port to bind the route UDP socket to. This can be any port that is not being used anywhere else. These must be unique between every VOR app/route you add. NOTE: It is best to keep your bind ports in the higher range to reduce the likelihood of it interfering with another service.
-    ![Route Bind Port](./images/add_app_bind_port.png)
+    
+![Route Bind Port](./images/add_app_bind_port.png)
+    
     - Click Add
 
 4. Remember to set your OSC apps to bind on different ports (The "App Ports" in VOR). And they should still be sending directly to VRChat (VRChat default bind port is 9000).
