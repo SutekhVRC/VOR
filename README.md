@@ -45,7 +45,7 @@
     #### Only build binary
     - `cargo build --release`
     - Release binary will be in ./target/release/
-    #### Build MSI package
+    #### Build MSI package (Only Windows)
     - `cargo wix`
     - MSI installer will be in ./target/wix/
 
