@@ -32,7 +32,7 @@
 ### Linux x86_64
 1. Download the [latest](https://github.com/SutekhVRC/VOR/releases/latest) standalone ELF binary.
 2. Make executable and execute it.
-3. Note: If binding to any port less than or equal to 1024 you need elevated privliges on most linux distros.
+3. Note: If binding to any port less than or equal to 1024 you need elevated privileges on most linux distros.
 
 ## Build VOR yourself
 
