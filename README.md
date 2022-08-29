@@ -91,4 +91,6 @@ Click Add
 
 ## Planned features sometime in the future :)
 
-### Update notifications
+1. Packet/Routing debugging feature
+2. Import/Export for config files
+3. Options to set L4 protocol for routes
