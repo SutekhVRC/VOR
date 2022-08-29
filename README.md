@@ -25,8 +25,29 @@
 
 ## Install
 
+### Windows x86_64
 1. Download the [latest](https://github.com/SutekhVRC/VOR/releases/latest) MSI and run it.
 2. vor.exe will be installed to C:\Program Files\vor\bin\vor.exe. You can also search for it by pressing the windows key and searching "VOR".
+
+### Linux x86_64
+1. Download the [latest](https://github.com/SutekhVRC/VOR/releases/latest) standalone ELF binary.
+2. Make executable and execute it.
+3. Note: If binding to any port less than or equal to 1024 you need elevated privliges on most linux distros.
+
+## Build VOR yourself
+
+### Windows x86_64 & Linux x86_64 (All commands used will work on both platforms)
+1. Install Rust & cargo [here](https://www.rust-lang.org/tools/install).
+2. Build commands
+    - `rustup default stable`
+    - `git clone https://github.com/SutekhVRC/VOR`
+    - `cd VOR`
+    #### Only build binary
+    - `cargo build --release`
+    - Release binary will be in ./target/release/
+    #### Build MSI package
+    - `cargo wix`
+    - MSI installer will be in ./target/wix/
 
 ## Setup an app
 
