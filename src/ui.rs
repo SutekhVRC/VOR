@@ -580,7 +580,9 @@ impl VORGUI {
                     } else {
                         ui.label(RichText::new("Locked").color(Color32::RED));
                     }*/
-                    ui.label(RichText::new("Debug Mode Active").color(Color32::GREEN));
+                    if self.route_debug.is_some() {
+                        ui.label(RichText::new("Debug Mode Active").color(Color32::GREEN));
+                    }
                     //});
                 } else {
                     //ui.group(|ui| {
