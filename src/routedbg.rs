@@ -117,6 +117,9 @@ pub enum DebugPacket {
 
 impl DebugPacket {
     pub fn search(&self, query: String) -> bool {
+        if query.is_empty() {
+            return false;// Optimization for when string is empty (for now)
+        }
         let query = query.to_lowercase();
         match self {
             Self::INCOMING(i) => {
