@@ -1,9 +1,11 @@
+use crate::routedbg::DebugPacket;
 use crate::VCArgs;
 use crate::{
     config::{
         AppConfigCheck, AppConfigState, AppConflicts, InputValidation, RouterConfig,
         VORAppIdentifier, VORAppStatus, VORConfig, VORConfigWrapper,
     },
+    routedbg,
     routing::{route_main, PacketFilter, RouterMsg},
     vorupdate::{VORUpdater, VERSION},
     vorutils::{check_valid_ipv4, check_valid_port, file_exists, get_user_home_dir},
@@ -18,6 +20,7 @@ use eframe::{
     egui::{self, CentralPanel},
     App,
 };
+use rosc::OscPacket;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::{fs, thread};
 
@@ -36,6 +39,7 @@ pub struct VORGUI {
     pf_wl_new: (String, bool),
     pf_bl_new: (String, bool),
     update_engine: VORUpdater,
+    route_debug: Option<routedbg::VORDebug>,
 }
 
 pub enum VORGUITab {
@@ -68,6 +72,7 @@ impl VORGUI {
             pf_bl_new: (String::new(), false),
             pf_wl_new: (String::new(), false),
             update_engine: VORUpdater::new(),
+            route_debug: None,
         };
 
         // Read config values
@@ -148,6 +153,297 @@ impl VORGUI {
                 });
             });
         });
+    }
+
+    fn debug_window(&mut self, ui: &egui::Ui, ctx: &egui::Context) {
+        ctx.request_repaint();
+        egui::Window::new("VOR Debug")
+            .resizable(true)
+            .drag_bounds(ui.max_rect())
+            .min_height(450.)
+            .min_width(425.)
+            .show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.checkbox(
+                        &mut self.route_debug.as_mut().unwrap().ui_opts.show_incoming,
+                        "INCOMING",
+                    );
+                    ui.checkbox(
+                        &mut self.route_debug.as_mut().unwrap().ui_opts.show_outgoing,
+                        "OUTGOING",
+                    );
+                    ui.checkbox(
+                        &mut self.route_debug.as_mut().unwrap().ui_opts.show_allowed,
+                        "ALLOWED",
+                    );
+                    ui.checkbox(
+                        &mut self.route_debug.as_mut().unwrap().ui_opts.show_dropped,
+                        "DROPPED",
+                    );
+                    ui.with_layout(Layout::right_to_left(), |ui| {
+                        if ui.button("Clear Packets").clicked() {
+                            self.route_debug.as_mut().unwrap().vor_dbg_packets.clear();
+                        }
+                    });
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Search/Filter: ");
+                    ui.text_edit_singleline(
+                        &mut self.route_debug.as_mut().unwrap().ui_opts.search_query,
+                    );
+                });
+
+                ui.separator();
+                ScrollArea::new([true, true])
+                    .id_source("top_debug_section")
+                    .max_height(ui.available_height())
+                    .auto_shrink([false, false])
+                    .stick_to_right()
+                    .show(ui, |ui| {
+                        let mut id_increment = 0;
+                        for packet in &self.route_debug.as_ref().unwrap().vor_dbg_packets {
+                            match packet {
+                                DebugPacket::INCOMING(pkt) => {
+                                    if self.route_debug.as_ref().unwrap().ui_opts.show_incoming {
+                                        if self.route_debug.as_ref().unwrap().ui_opts.show_allowed
+                                            && pkt.mode.is_allowed()
+                                        {
+                                            //println!("PRINTING ALLOWED");
+
+                                            if packet.search(
+                                                self.route_debug
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .ui_opts
+                                                    .search_query
+                                                    .clone(),
+                                            ) || self
+                                                .route_debug
+                                                .as_ref()
+                                                .unwrap()
+                                                .ui_opts
+                                                .search_query
+                                                .is_empty()
+                                            {
+                                                egui::CollapsingHeader::new(
+                                                    RichText::new(format!(
+                                                        "Incoming({:?}): {}",
+                                                        pkt.mode, pkt.from_address
+                                                    ))
+                                                    .color(Color32::GREEN),
+                                                )
+                                                .id_source(id_increment)
+                                                .show(ui, |ui| {
+                                                    //ui.label(format!("Mode {:?} - Buffer length: {} - OscPacket: {:?}", pkt.mode, pkt.packet_buffer.len(), pkt.osc_packet));
+
+                                                    ui.label(format!(
+                                                        "L3 Src Address: {}",
+                                                        pkt.from_address
+                                                    ));
+                                                    ui.horizontal_wrapped(|ui| {
+                                                        ui.label(RichText::new("PF Decision:"));
+                                                        ui.colored_label(
+                                                            Color32::GREEN,
+                                                            RichText::new(format!(
+                                                                "{:?}",
+                                                                pkt.mode
+                                                            )),
+                                                        );
+                                                    });
+
+                                                    if ui.button("Copy OSC Address").clicked() {
+                                                        ui.output().copied_text =
+                                                            match pkt.osc_packet.as_ref().unwrap() {
+                                                                OscPacket::Message(msg) => {
+                                                                    msg.addr.clone()
+                                                                }
+                                                                OscPacket::Bundle(_) => {
+                                                                    "".to_string()
+                                                                }
+                                                            }
+                                                    }
+                                                    egui::CollapsingHeader::new(RichText::new(
+                                                        "OSC Packet",
+                                                    ))
+                                                    .show(ui, |ui| {
+                                                        ui.label(RichText::new(format!(
+                                                            "{:#?}",
+                                                            pkt.osc_packet.as_ref().unwrap()
+                                                        )));
+                                                    });
+                                                });
+                                                id_increment += 1;
+                                            }
+                                        }
+
+                                        if self.route_debug.as_ref().unwrap().ui_opts.show_dropped
+                                            && pkt.mode.is_dropped()
+                                        {
+                                            //println!("PRINTING DROPPED");
+
+                                            if packet.search(
+                                                self.route_debug
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .ui_opts
+                                                    .search_query
+                                                    .clone(),
+                                            ) || self
+                                                .route_debug
+                                                .as_ref()
+                                                .unwrap()
+                                                .ui_opts
+                                                .search_query
+                                                .is_empty()
+                                            {
+                                                egui::CollapsingHeader::new(
+                                                    RichText::new(format!(
+                                                        "Incoming({:?}): {}",
+                                                        pkt.mode, pkt.from_address
+                                                    ))
+                                                    .color(Color32::RED),
+                                                )
+                                                .id_source(id_increment)
+                                                .show(ui, |ui| {
+                                                    //ui.label(format!("Mode {:?} - Buffer length: {} - OscPacket: {:?}", pkt.mode, pkt.packet_buffer.len(), pkt.osc_packet));
+
+                                                    ui.label(format!(
+                                                        "L3 Src Address: {}",
+                                                        pkt.from_address
+                                                    ));
+                                                    ui.horizontal_wrapped(|ui| {
+                                                        ui.label(RichText::new("PF Decision:"));
+                                                        ui.colored_label(
+                                                            Color32::RED,
+                                                            RichText::new(format!(
+                                                                "{:?}",
+                                                                pkt.mode
+                                                            )),
+                                                        );
+                                                    });
+                                                    if ui.button("Copy OSC Address").clicked() {
+                                                        ui.output().copied_text =
+                                                            match pkt.osc_packet.as_ref().unwrap() {
+                                                                OscPacket::Message(msg) => {
+                                                                    msg.addr.clone()
+                                                                }
+                                                                OscPacket::Bundle(_) => {
+                                                                    "".to_string()
+                                                                }
+                                                            }
+                                                    }
+                                                    egui::CollapsingHeader::new(RichText::new(
+                                                        "OSC Packet",
+                                                    ))
+                                                    .show(ui, |ui| {
+                                                        ui.label(RichText::new(format!(
+                                                            "{:#?}",
+                                                            pkt.osc_packet.as_ref().unwrap()
+                                                        )));
+                                                    });
+                                                });
+                                                id_increment += 1;
+                                            }
+                                        }
+                                    }
+                                }
+                                DebugPacket::OUTGOING(pkt) => {
+                                    if self.route_debug.as_ref().unwrap().ui_opts.show_outgoing {
+                                        if packet.search(
+                                            self.route_debug
+                                                .as_ref()
+                                                .unwrap()
+                                                .ui_opts
+                                                .search_query
+                                                .clone(),
+                                        ) || self
+                                            .route_debug
+                                            .as_ref()
+                                            .unwrap()
+                                            .ui_opts
+                                            .search_query
+                                            .is_empty()
+                                        {
+                                            egui::CollapsingHeader::new(
+                                                RichText::new(format!(
+                                                    "Outgoing: {} ({})",
+                                                    pkt.route, pkt.to_address
+                                                ))
+                                                .color(Color32::from_rgb(0xef, 0x98, 0xff)),
+                                            )
+                                            .id_source(id_increment)
+                                            .show(
+                                                ui,
+                                                |ui| {
+                                                    //ui.label(format!("App Route: {} - Buffer length: {} - OscPacket: {:?}", pkt.route, pkt.packet_buffer.len(), pkt.osc_packet));
+                                                    ui.label(format!(
+                                                        "L3 Dest Address: {}",
+                                                        pkt.to_address
+                                                    ));
+                                                    ui.horizontal_wrapped(|ui| {
+                                                        ui.label(RichText::new("Route:"));
+                                                        ui.colored_label(
+                                                            Color32::GREEN,
+                                                            RichText::new(format!("{}", pkt.route)),
+                                                        );
+                                                    });
+
+                                                    if ui.button("Copy OSC Address").clicked() {
+                                                        ui.output().copied_text =
+                                                            match pkt.osc_packet.as_ref().unwrap() {
+                                                                OscPacket::Message(msg) => {
+                                                                    msg.addr.clone()
+                                                                }
+                                                                OscPacket::Bundle(_) => {
+                                                                    "".to_string()
+                                                                }
+                                                            }
+                                                    }
+                                                    egui::CollapsingHeader::new(RichText::new(
+                                                        "OSC Packet",
+                                                    ))
+                                                    .show(ui, |ui| {
+                                                        ui.label(RichText::new(format!(
+                                                            "{:#?}",
+                                                            pkt.osc_packet.as_ref().unwrap()
+                                                        )));
+                                                    });
+                                                },
+                                            );
+                                            id_increment += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+            });
+    }
+
+    fn debug_status_refresh(&mut self) {
+        // Update VOR Debug structure
+        if self.route_debug.is_some() {
+            for _ in 0..256 {
+                match self
+                    .route_debug
+                    .as_ref()
+                    .unwrap()
+                    .sig_channel_handler
+                    .debug_in
+                    .rx
+                    .try_recv()
+                {
+                    Ok(dbg_pkt) => {
+                        self.route_debug
+                            .as_mut()
+                            .unwrap()
+                            .vor_dbg_packets
+                            .insert(0, dbg_pkt);
+                    }
+                    Err(_err) => break, /* Failed to read from debug channel */
+                }
+            }
+        }
     }
 
     fn status_refresh(&mut self) {
@@ -241,6 +537,7 @@ impl VORGUI {
         ui.separator();
         ui.add_space(1.0);
         ui.label("Routing mode");
+        ui.separator();
         ui.horizontal_wrapped(|ui| {
             ui.checkbox(
                 &mut self.vor_router_config.async_mode,
@@ -274,6 +571,16 @@ impl VORGUI {
                             ctx.request_repaint();
                         }
                     }
+
+                    /*
+                    if self.route_debug.is_some() {
+                        if ui.button(RichText::new("Debug").color(Color32::GREEN)).clicked() {
+                            self.route_debug = None;
+                        }
+                    } else {
+                        ui.label(RichText::new("Locked").color(Color32::RED));
+                    }*/
+                    ui.label(RichText::new("Debug Mode Active").color(Color32::GREEN));
                     //});
                 } else {
                     //ui.group(|ui| {
@@ -284,6 +591,21 @@ impl VORGUI {
                         if !self.running {
                             self.start_router();
                             ctx.request_repaint();
+                        }
+                    }
+                    if self.route_debug.is_some() {
+                        if ui
+                            .button(RichText::new("Debug").color(Color32::GREEN))
+                            .clicked()
+                        {
+                            self.route_debug = None;
+                        }
+                    } else {
+                        if ui
+                            .button(RichText::new("Debug").color(Color32::RED))
+                            .clicked()
+                        {
+                            self.route_debug = Some(routedbg::VORDebug::new());
                         }
                     }
                     //});
@@ -333,6 +655,16 @@ impl VORGUI {
 
         let pf = self.pf.clone();
         let async_mode = self.vor_router_config.async_mode;
+
+        let debug_sender = match &self.route_debug {
+            Some(rd) => Some(rd.sig_channel_handler.debug_in.tx.clone()),
+            None => None,
+        };
+        let debug_config = match &self.route_debug {
+            Some(rd) => Some(rd.options.clone()),
+            None => None,
+        };
+
         thread::spawn(move || {
             route_main(
                 bind_target,
@@ -342,6 +674,8 @@ impl VORGUI {
                 pf,
                 vor_buf_size,
                 async_mode,
+                debug_sender,
+                debug_config,
             );
         });
 
@@ -357,6 +691,7 @@ impl VORGUI {
             .unwrap();
         //self.router_msg_recvr = None;
         self.running = false;
+        thread::sleep(std::time::Duration::from_secs(1));
 
         if self.vor_router_config.async_mode {
             for app_conf in &mut self.configs {
@@ -368,7 +703,6 @@ impl VORGUI {
     }
 
     fn save_vor_config(&mut self) {
-
         #[cfg(target_os = "windows")]
         {
             fs::write(
@@ -380,14 +714,11 @@ impl VORGUI {
             )
             .unwrap();
         }
-        
+
         #[cfg(target_os = "linux")]
         {
             fs::write(
-                format!(
-                    "{}/.vor/VORConfig.json",
-                    get_user_home_dir()
-                ),
+                format!("{}/.vor/VORConfig.json", get_user_home_dir()),
                 serde_json::to_string(&self.vor_router_config).unwrap(),
             )
             .unwrap();
@@ -528,11 +859,21 @@ impl VORGUI {
     fn add_app(&mut self, ui: &mut egui::Ui) {
         ui.group(|ui| {
             if self.adding_new_app {
-                ui.label("App Name");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_name));
-                ui.label("App Host");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_host));
-                ui.label("App Port");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_port));
-                ui.label("Bind Host");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_host));
-                ui.label("Bind Port");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_port));
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("App Name: ");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_name));
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("App Host: ");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_host));
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("App Port: ");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_port));
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Bind Host:");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_host));
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Bind Port:");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_port));
+                });
 
                 ui.horizontal_wrapped(|ui| {
                     match &self.new_app_cf_exists_err {
@@ -544,7 +885,7 @@ impl VORGUI {
                         },
                         AppConfigCheck::SUCCESS => {},
                     }
-                    ui.separator();
+                    //ui.separator();
                     ui.horizontal(|ui| {
                         ui.with_layout(Layout::right_to_left(), |ui| {
                             if ui.button(RichText::new("Cancel").color(Color32::RED)).clicked() {
@@ -564,7 +905,6 @@ impl VORGUI {
                                     self.new_app.as_mut().unwrap().config_path = format!("{}/.vor/VORAppConfigs/{}.json", get_user_home_dir(), self.new_app.as_ref().unwrap().config_data.app_name);
                                 }
 
-                                
                                 if !file_exists(&self.new_app.as_ref().unwrap().config_path) && self.vor_router_config.bind_port != self.new_app.as_ref().unwrap().config_data.bind_port {
                                     self.configs.push((self.new_app.as_ref().unwrap().clone(), VORAppStatus::Stopped, AppConfigState::SAVED));
 
@@ -660,11 +1000,22 @@ impl VORGUI {
                 match check {
 
                     AppConfigState::EDIT(ref chk) => {
-                        ui.label("App Name");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_name));
-                        ui.label("App Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_host));
-                        ui.label("App Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_port));
-                        ui.label("Bind Host");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_host));
-                        ui.label("Bind Port");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_port));
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("App Name: ");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_name));
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("App Host: ");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_host));
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("App Port: ");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_port));
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("Bind Host:");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_host));
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("Bind Port:");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_port));
+                        });
+
                         match chk {
                             AppConfigCheck::AC(c) => {
                                 ui.horizontal(|ui| {
@@ -691,26 +1042,24 @@ impl VORGUI {
 
                         ui.horizontal(|ui| {
                             ui.with_layout(Layout::right_to_left(), |ui| {
-                                ui.group(|ui| {
-                                    if ui.button(RichText::new("Save")).clicked() {
-                                        // Save config / Input val / Val collision
-                                        match self.save_app_config(i, false) {
-                                            AppConfigCheck::SUCCESS => {
-                                                self.configs[i].2 = AppConfigState::SAVED;// Not being edited
-                                            },
-                                            AppConfigCheck::AC(ac) => {
-                                                // Conflicting input errors
-                                                //ui.colored_label(Color32::GOLD, format!("App conflict: {}", ac));
-                                                self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::AC(ac));
-                                            },
-                                            AppConfigCheck::IV(iv) => {
-                                                // Input invalid
-                                                //ui.colored_label(Color32::GOLD, format!("App invalid input: {}", iv));
-                                                self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::IV(iv));
-                                            },
-                                        }
+                                if ui.button(RichText::new("Save")).clicked() {
+                                    // Save config / Input val / Val collision
+                                    match self.save_app_config(i, false) {
+                                        AppConfigCheck::SUCCESS => {
+                                            self.configs[i].2 = AppConfigState::SAVED;// Not being edited
+                                        },
+                                        AppConfigCheck::AC(ac) => {
+                                            // Conflicting input errors
+                                            //ui.colored_label(Color32::GOLD, format!("App conflict: {}", ac));
+                                            self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::AC(ac));
+                                        },
+                                        AppConfigCheck::IV(iv) => {
+                                            // Input invalid
+                                            //ui.colored_label(Color32::GOLD, format!("App invalid input: {}", iv));
+                                            self.configs[i].2 = AppConfigState::EDIT(AppConfigCheck::IV(iv));
+                                        },
                                     }
-                                });
+                                }
                             });
                         });
                     },
@@ -770,7 +1119,6 @@ impl VORGUI {
     }
 
     fn save_pf_config(&mut self) {
-        
         #[cfg(target_os = "windows")]
         {
             fs::write(
@@ -786,10 +1134,7 @@ impl VORGUI {
         #[cfg(target_os = "linux")]
         {
             fs::write(
-                format!(
-                    "{}/.vor/VOR_PF.json",
-                    get_user_home_dir()
-                ),
+                format!("{}/.vor/VOR_PF.json", get_user_home_dir()),
                 serde_json::to_string(&self.pf).unwrap(),
             )
             .unwrap();
@@ -1040,6 +1385,13 @@ impl App for VORGUI {
                     ui.separator();
                     self.list_vor_config(ui);
                 }
+            }
+
+            // Debug window
+            if self.route_debug.is_some() {
+                self.debug_status_refresh();
+                self.debug_window(ui, ctx);
+            } else {
             }
         });
         self.gui_footer(&ctx);

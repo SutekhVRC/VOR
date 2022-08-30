@@ -8,6 +8,7 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{self, Receiver as bcst_Receiver, Sender as bcst_Sender};
 
+use crate::routedbg;
 use crate::{
     config::{VORAppIdentifier, VORAppStatus, VORConfig},
     vorerr::app_error,
@@ -35,6 +36,8 @@ fn route_app(
     app_stat_tx_at: Sender<VORAppIdentifier>,
     ai: i64,
     app: VORConfig,
+    debug_sender: Option<Sender<routedbg::DebugPacket>>,
+    _debug_out_config: Option<routedbg::VORDebugOptions>,
 ) {
     let rhp = format!("{}:{}", app.app_host, app.app_port);
     let lhp = format!("{}:{}", app.bind_host, app.bind_port);
@@ -78,7 +81,28 @@ fn route_app(
             Ok(b) => {
                 // Route buffer
                 match sock.send_to(&b, &rhp) {
-                    Ok(_bs) => {}
+                    Ok(_bs) => {
+                        if let Some(ref dbgs) = debug_sender {
+                            // Try to get parsed packet
+                            if let Ok(pkt) = rosc::decoder::decode_udp(&b) {
+                                routedbg::send_outdbg_packet(
+                                    dbgs,
+                                    app.app_name.clone(),
+                                    rhp.clone(),
+                                    &b,
+                                    Some(pkt.1),
+                                );
+                            } else {
+                                routedbg::send_outdbg_packet(
+                                    dbgs,
+                                    app.app_name.clone(),
+                                    rhp.clone(),
+                                    &b,
+                                    None,
+                                );
+                            }
+                        }
+                    }
                     Err(_e) => {
                         let _ = app_stat_tx_at.send(app_error(
                             ai,
@@ -109,6 +133,8 @@ async fn route_app_async(
     app_stat_tx_at: Sender<VORAppIdentifier>,
     ai: i64,
     app: VORConfig,
+    debug_sender: Option<Sender<routedbg::DebugPacket>>,
+    _debug_out_config: Option<routedbg::VORDebugOptions>,
 ) {
     let rhp = format!("{}:{}", app.app_host, app.app_port);
     let lhp = format!("{}:{}", app.bind_host, app.bind_port);
@@ -153,7 +179,28 @@ async fn route_app_async(
             Ok(b) => {
                 // Route buffer
                 match sock.send_to(&b, &rhp).await {
-                    Ok(_bs) => {}
+                    Ok(_bs) => {
+                        if let Some(ref dbgs) = debug_sender {
+                            // Try to get parsed packet
+                            if let Ok(pkt) = rosc::decoder::decode_udp(&b) {
+                                routedbg::send_outdbg_packet(
+                                    dbgs,
+                                    app.app_name.clone(),
+                                    rhp.clone(),
+                                    &b,
+                                    Some(pkt.1),
+                                );
+                            } else {
+                                routedbg::send_outdbg_packet(
+                                    dbgs,
+                                    app.app_name.clone(),
+                                    rhp.clone(),
+                                    &b,
+                                    None,
+                                );
+                            }
+                        }
+                    }
                     Err(_e) => {
                         let _ = app_stat_tx_at.send(app_error(
                             ai,
@@ -182,6 +229,8 @@ fn parse_vrc_osc(
     router_rx: Receiver<bool>,
     pf: PacketFilter,
     vrc_sock: UdpSocket,
+    _debug_incoming_config: Option<routedbg::VORDebugOptions>,
+    debug_sender: Option<Sender<routedbg::DebugPacket>>,
 ) {
     let pf_wl: Vec<String> = pf.address_wl.iter().map(|i| i.0.clone()).collect();
     let pf_bl: Vec<String> = pf.address_bl.iter().map(|i| i.0.clone()).collect();
@@ -189,7 +238,7 @@ fn parse_vrc_osc(
 
     loop {
         match vrc_sock.recv_from(&mut buf) {
-            Ok((br, _a)) => {
+            Ok((br, address)) => {
                 if br <= 0 {
                     // If got bytes send them to routers otherwise restart loop
                     continue;
@@ -201,35 +250,112 @@ fn parse_vrc_osc(
                         if pf.wl_enabled {
                             // Whitelist
                             match rosc::decoder::decode_udp(&buf) {
-                                Ok(pkt) => {
-                                    if let OscPacket::Message(msg) = pkt.1 {
+                                Ok(ref pkt) => {
+                                    if let OscPacket::Message(msg) = &pkt.1 {
                                         if pf_wl.contains(&msg.addr) {
                                             bcst_tx.send(buf.to_vec()).unwrap();
+                                            if let Some(ref dbgs) = debug_sender {
+                                                routedbg::send_indbg_packet(
+                                                    dbgs,
+                                                    &buf,
+                                                    Some(pkt.1.clone()),
+                                                    address.to_string(),
+                                                    routedbg::IncomingDebugMode::ALLOWED,
+                                                );
+                                            }
+                                        } else {
+                                            if let Some(ref dbgs) = debug_sender {
+                                                routedbg::send_indbg_packet(
+                                                    dbgs,
+                                                    &buf,
+                                                    Some(pkt.1.clone()),
+                                                    address.to_string(),
+                                                    routedbg::IncomingDebugMode::DROPPED,
+                                                );
+                                            }
                                         }
                                     }
                                 }
                                 Err(_e) => {
                                     if !pf.filter_bad_packets {
-                                        //println!("[*] Routing bad OSC packet!");
+                                        // Bad OSC packet routed
                                         bcst_tx.send(buf.to_vec()).unwrap();
+                                        if let Some(ref dbgs) = debug_sender {
+                                            routedbg::send_indbg_packet(
+                                                dbgs,
+                                                &buf,
+                                                None,
+                                                address.to_string(),
+                                                routedbg::IncomingDebugMode::ALLOWED,
+                                            );
+                                        }
+                                    } else {
+                                        if let Some(ref dbgs) = debug_sender {
+                                            routedbg::send_indbg_packet(
+                                                dbgs,
+                                                &buf,
+                                                None,
+                                                address.to_string(),
+                                                routedbg::IncomingDebugMode::DROPPED,
+                                            );
+                                        }
                                     }
                                 }
                             }
                         } else if pf.bl_enabled {
                             // Blacklist
                             match rosc::decoder::decode_udp(&buf) {
-                                Ok(pkt) => {
-                                    if let OscPacket::Message(msg) = pkt.1 {
+                                Ok(ref pkt) => {
+                                    if let OscPacket::Message(msg) = &pkt.1 {
                                         if !pf_bl.contains(&msg.addr) {
                                             bcst_tx.send(buf.to_vec()).unwrap();
+
+                                            if let Some(ref dbgs) = debug_sender {
+                                                routedbg::send_indbg_packet(
+                                                    dbgs,
+                                                    &buf,
+                                                    Some(pkt.1.clone()),
+                                                    address.to_string(),
+                                                    routedbg::IncomingDebugMode::ALLOWED,
+                                                );
+                                            }
+                                        } else {
+                                            if let Some(ref dbgs) = debug_sender {
+                                                routedbg::send_indbg_packet(
+                                                    dbgs,
+                                                    &buf,
+                                                    Some(pkt.1.clone()),
+                                                    address.to_string(),
+                                                    routedbg::IncomingDebugMode::DROPPED,
+                                                );
+                                            }
                                         }
                                     }
                                 }
                                 Err(_e) => {
                                     // Packet was bad should it still be sent?
                                     if !pf.filter_bad_packets {
-                                        //println!("[*] Routing bad OSC packet!");
+                                        // Bad OSC packet routed
                                         bcst_tx.send(buf.to_vec()).unwrap();
+                                        if let Some(ref dbgs) = debug_sender {
+                                            routedbg::send_indbg_packet(
+                                                dbgs,
+                                                &buf,
+                                                None,
+                                                address.to_string(),
+                                                routedbg::IncomingDebugMode::ALLOWED,
+                                            );
+                                        }
+                                    } else {
+                                        if let Some(ref dbgs) = debug_sender {
+                                            routedbg::send_indbg_packet(
+                                                dbgs,
+                                                &buf,
+                                                None,
+                                                address.to_string(),
+                                                routedbg::IncomingDebugMode::DROPPED,
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -238,18 +364,79 @@ fn parse_vrc_osc(
 
                             if pf.filter_bad_packets {
                                 // If filter bad packets enabled check if bad packet
-                                if let Ok(_) = rosc::decoder::decode_udp(&buf) {
+                                if let Ok(pkt) = rosc::decoder::decode_udp(&buf) {
                                     bcst_tx.send(buf.to_vec()).unwrap();
-                                } else { /*println!("[*] Filtered bad packet");*/
+                                    if let Some(ref dbgs) = debug_sender {
+                                        routedbg::send_indbg_packet(
+                                            dbgs,
+                                            &buf,
+                                            Some(pkt.1),
+                                            address.to_string(),
+                                            routedbg::IncomingDebugMode::ALLOWED,
+                                        );
+                                    }
+                                } else {
+                                    /*println!("[*] Filtered bad packet");*/
+                                    if let Some(ref dbgs) = debug_sender {
+                                        routedbg::send_indbg_packet(
+                                            dbgs,
+                                            &buf,
+                                            None,
+                                            address.to_string(),
+                                            routedbg::IncomingDebugMode::DROPPED,
+                                        );
+                                    }
                                 }
                             } else {
                                 // If filter bad packets not enabled then send!
                                 bcst_tx.send(buf.to_vec()).unwrap();
+                                if let Some(ref dbgs) = debug_sender {
+                                    // Try to get parsed packet
+                                    if let Ok(pkt) = rosc::decoder::decode_udp(&buf) {
+                                        routedbg::send_indbg_packet(
+                                            dbgs,
+                                            &buf,
+                                            Some(pkt.1),
+                                            address.to_string(),
+                                            routedbg::IncomingDebugMode::ALLOWED,
+                                        );
+                                    } else {
+                                        // Still ALLOWED because filter bad packets is disabled
+                                        routedbg::send_indbg_packet(
+                                            dbgs,
+                                            &buf,
+                                            None,
+                                            address.to_string(),
+                                            routedbg::IncomingDebugMode::ALLOWED,
+                                        );
+                                    }
+                                }
                             }
                         }
                     } else {
                         // PF disabled
                         bcst_tx.send(buf.to_vec()).unwrap();
+                        if let Some(ref dbgs) = debug_sender {
+                            // Try to get parsed packet
+                            if let Ok(pkt) = rosc::decoder::decode_udp(&buf) {
+                                routedbg::send_indbg_packet(
+                                    dbgs,
+                                    &buf,
+                                    Some(pkt.1),
+                                    address.to_string(),
+                                    routedbg::IncomingDebugMode::ALLOWED,
+                                );
+                            } else {
+                                // Still ALLOWED because PF is disabled
+                                routedbg::send_indbg_packet(
+                                    dbgs,
+                                    &buf,
+                                    None,
+                                    address.to_string(),
+                                    routedbg::IncomingDebugMode::ALLOWED,
+                                );
+                            }
+                        }
                     }
 
                     match router_rx.try_recv() {
@@ -287,6 +474,8 @@ pub fn route_main(
     pf: PacketFilter,
     vor_queue_size: usize,
     async_mode: bool,
+    debug_route_channels: Option<Sender<routedbg::DebugPacket>>,
+    debug_config: Option<routedbg::VORDebugOptions>,
 ) {
     // Bind UDP listening socket
     let vrc_sock = match UdpSocket::bind(router_bind_target) {
@@ -320,6 +509,9 @@ pub fn route_main(
 
         let app_stat_tx_at = app_stat_tx.clone();
         let bcst_app_rx = bcst_tx.subscribe();
+
+        let app_debug_sender_clone = debug_route_channels.clone();
+        let app_debug_config_clone = debug_config.clone();
         /*
             Spawn app routers in the async runtime
         */
@@ -330,9 +522,21 @@ pub fn route_main(
                 app_stat_tx_at,
                 id,
                 app,
+                app_debug_sender_clone,
+                app_debug_config_clone,
             )));
         } else {
-            thread::spawn(move || route_app(bcst_app_rx, router_rx, app_stat_tx_at, id, app));
+            thread::spawn(move || {
+                route_app(
+                    bcst_app_rx,
+                    router_rx,
+                    app_stat_tx_at,
+                    id,
+                    app,
+                    app_debug_sender_clone,
+                    app_debug_config_clone,
+                )
+            });
         }
     }
     drop(_bcst_rx); // Dont need this rx
@@ -340,7 +544,14 @@ pub fn route_main(
     let (osc_parse_tx, osc_parse_rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
 
     thread::spawn(move || {
-        parse_vrc_osc(bcst_tx, osc_parse_rx, pf, vrc_sock);
+        parse_vrc_osc(
+            bcst_tx,
+            osc_parse_rx,
+            pf,
+            vrc_sock,
+            debug_config,
+            debug_route_channels,
+        );
     });
     //println!("[+] Started VRChat OSC Router.");
 

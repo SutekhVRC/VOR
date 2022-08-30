@@ -1,7 +1,7 @@
-use reqwest::{self, StatusCode};
-use serde_json::Value;
 #[cfg(target_os = "linux")]
 use open;
+use reqwest::{self, StatusCode};
+use serde_json::Value;
 #[cfg(target_os = "windows")]
 use std::process::Command;
 
@@ -12,10 +12,10 @@ use std::os::windows::process::CommandExt;
 pub const DETACHED_PROCESS: u32 = 0x00000008;
 
 #[cfg(target_os = "windows")]
-pub const VERSION: &str = "0.2.4-beta-windows";
+pub const VERSION: &str = "0.3.0-beta-windows";
 
 #[cfg(target_os = "linux")]
-pub const VERSION: &str = "0.2.4-beta-linux";
+pub const VERSION: &str = "0.3.0-beta-linux";
 
 pub struct VORVersion {
     pub version_str: String,

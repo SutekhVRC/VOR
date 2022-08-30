@@ -8,14 +8,16 @@
 - Windows (.msi)
 - Linux (.elf)
 
+### Version 0.3.0-beta
+- Added debugging mode to help with debugging OSC route configurations, and packet filtering configurations.
+- UI tweaks ( I hate doing UI/UX ok )
+
 ### Version 0.2.4-beta
 - Windows and Linux builds
 - Update button that shows when out of date
 - Bug fixes
 
-### Version 0.1.61-beta 
-- I have added an asynchronous routing mode that drastically improves execution efficiency of router threads.
-- Asynchronous option is in the config tab!
+
 ### Please report bugs!
 - Note that VOR is meant to be used to route OSC traffic that is RECEIVED from VRChat. All OSC apps can send to VRC on their own, but VRChat can only send to one port.
 
@@ -110,8 +112,17 @@ Click Add
 ### Routing mode
 - Asynchronous routing: Default is enabled. Asynchronous routing enabled will drastically improve efficiency. I recommend using asynchronous mode. If you disable this you may get more responsive routing as the cost of higher CPU usage.
 
+## OSC Debug Mode
+
+- To use OSC debugging mode you must enable it by clicking the debug button.
+- Once debug mode is enabled you can start the router.
+- UI packet filtering is applied in this order:
+    1. INCOMING/OUTGOING
+    2. DROPPED/ALLOWED
+    3. Search/Filter
+- Remember to disable debug mode when done.
+
 ## Planned features sometime in the future :)
 
-1. Packet/Routing debugging feature
-2. Import/Export for config files
-3. Options to set L4 protocol for routes
+1. Import/Export for config files
+2. Options to set L4 protocol for routes

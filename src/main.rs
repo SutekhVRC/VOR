@@ -5,6 +5,7 @@ use eframe::{egui::Vec2, run_native, NativeOptions};
 use clap::Parser;
 
 mod config;
+mod routedbg;
 mod routing;
 mod ui;
 mod vorerr;
@@ -31,7 +32,7 @@ fn main() {
     let (vor_router_config, configs, pf) = config_construct();
 
     let mut native_opts = NativeOptions::default();
-    native_opts.initial_window_size = Some(Vec2::new(330., 450.));
+    native_opts.initial_window_size = Some(Vec2::new(700., 750.));
 
     run_native(
         "VRChat OSC Router",
