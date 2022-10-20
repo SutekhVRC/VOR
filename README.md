@@ -2,7 +2,7 @@
 
 *A router application for VRChat OSC, which allows OSC packets to be routed to multiple OSC applications.*
 
-Questions and help: [SutekhVRC Discord](https://discord.gg/SC3W6YwPHs)
+Questions and help: [SutekhVRC Discord](https://discord.gg/g6kUFtMtpw)
 
 ### Beta: Report bugs!
 
