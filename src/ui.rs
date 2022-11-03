@@ -27,7 +27,7 @@ use std::{fs, thread};
 pub struct VORGUI {
     configs: Vec<(VORConfigWrapper, VORAppStatus, AppConfigState)>,
     vc_args: VCArgs,
-    running: bool,
+    running: VORExecutionState,
     tab: VORGUITab,
     router_channel: Option<Sender<RouterMsg>>,
     vor_router_config: RouterConfig,
@@ -40,6 +40,12 @@ pub struct VORGUI {
     pf_bl_new: (String, bool),
     update_engine: VORUpdater,
     route_debug: Option<routedbg::VORDebug>,
+}
+
+enum VORExecutionState {
+    Running,
+    Stopped,
+    Error(String),
 }
 
 pub enum VORGUITab {
@@ -60,7 +66,7 @@ impl VORGUI {
         let mut app_obj = VORGUI {
             configs,
             vc_args,
-            running: false,
+            running: VORExecutionState::Stopped,
             tab: VORGUITab::Main,
             router_channel: None,
             vor_router_config,
@@ -92,7 +98,7 @@ impl VORGUI {
     }
 
     fn update_vor(&mut self) {
-        if self.running {
+        if let VORExecutionState::Running = self.running {
             self.stop_router();
         }
         let blob = self.update_engine.release_blob.take().unwrap();
@@ -130,11 +136,14 @@ impl VORGUI {
 
                         //ui.separator();
                         ui.with_layout(Layout::right_to_left(), |ui| {
-                            if self.running {
-                                ui.label(RichText::new("Routing").color(Color32::GREEN));
-                            } else {
-                                ui.label(RichText::new("Stopped").color(Color32::RED));
+                            match self.running {
+                                VORExecutionState::Running => {ui.label(RichText::new("Routing").color(Color32::GREEN));},
+                                VORExecutionState::Stopped => {ui.label(RichText::new("Stopped").color(Color32::RED));},
+                                VORExecutionState::Error(ref e) => {
+                                    ui.label(RichText::new(format!("Error: {}", e)).color(Color32::RED));
+                                }
                             }
+
                             if !self.update_engine.up_to_date {
                                 if ui
                                     .button(
@@ -457,7 +466,8 @@ impl VORGUI {
             None => return,
         };
         if status.index == -1 {
-            //println!("[!] VOR failed to bind listener socket.. Not started!");
+            println!("[!] VOR failed to bind listener socket.. Not started!");
+            self.running = VORExecutionState::Error("VOR Bind Error".to_string());
         } else {
             self.configs[status.index as usize].1 = status.status;
         }
@@ -563,54 +573,61 @@ impl VORGUI {
                         self.start_router();
                     }
                 }*/
-                if self.running {
+                match self.running {
                     //ui.group(|ui| {
-                    if ui.button("Stop").clicked() {
-                        if self.running {
-                            self.stop_router();
-                            ctx.request_repaint();
+                    VORExecutionState::Running => {
+                        if ui.button("Stop").clicked() {
+                            if let VORExecutionState::Running = self.running {
+                                self.stop_router();
+                                ctx.request_repaint();
+                            }
                         }
-                    }
 
-                    /*
-                    if self.route_debug.is_some() {
-                        if ui.button(RichText::new("Debug").color(Color32::GREEN)).clicked() {
-                            self.route_debug = None;
+                        if self.route_debug.is_some() {
+                            ui.label(RichText::new("Debug Mode Active").color(Color32::GREEN));
                         }
-                    } else {
-                        ui.label(RichText::new("Locked").color(Color32::RED));
-                    }*/
-                    if self.route_debug.is_some() {
-                        ui.label(RichText::new("Debug Mode Active").color(Color32::GREEN));
-                    }
-                    //});
-                } else {
+                    
+                    },
+                    VORExecutionState::Stopped => {
                     //ui.group(|ui| {
-                    if ui
-                        .button(RichText::new("Start").color(Color32::GREEN))
-                        .clicked()
-                    {
-                        if !self.running {
-                            self.start_router();
-                            ctx.request_repaint();
-                        }
-                    }
-                    if self.route_debug.is_some() {
                         if ui
-                            .button(RichText::new("Debug").color(Color32::GREEN))
+                            .button(RichText::new("Start").color(Color32::GREEN))
                             .clicked()
                         {
-                            self.route_debug = None;
+                            if let VORExecutionState::Stopped = self.running {
+                                self.start_router();
+                                ctx.request_repaint();
+                            }
                         }
-                    } else {
-                        if ui
-                            .button(RichText::new("Debug").color(Color32::RED))
-                            .clicked()
-                        {
-                            self.route_debug = Some(routedbg::VORDebug::new());
+                        if self.route_debug.is_some() {
+                            if ui
+                                .button(RichText::new("Debug").color(Color32::GREEN))
+                                .clicked()
+                            {
+                                self.route_debug = None;
+                            }
+                        } else {
+                            if ui
+                                .button(RichText::new("Debug").color(Color32::RED))
+                                .clicked()
+                            {
+                                self.route_debug = Some(routedbg::VORDebug::new());
+                            }
                         }
-                    }
                     //});
+                    },
+                    VORExecutionState::Error(_) => {
+                        if ui.button("Stop").clicked() {
+                            //if let VORExecutionState::Running = self.running {
+                                self.stop_router();
+                                ctx.request_repaint();
+                            //}
+                        }
+
+                        if self.route_debug.is_some() {
+                            ui.label(RichText::new("Debug Mode Active").color(Color32::GREEN));
+                        }
+                    }
                 }
             });
             ui.separator();
@@ -681,18 +698,21 @@ impl VORGUI {
             );
         });
 
-        self.running = true;
+        self.running = VORExecutionState::Running;
     }
 
     fn stop_router(&mut self) {
         // Send shutdown signal to OSC threads here
-        self.router_channel
+        match self.router_channel
             .take()
             .unwrap()
             .send(RouterMsg::ShutdownAll)
-            .unwrap();
-        //self.router_msg_recvr = None;
-        self.running = false;
+            {
+                Ok(_) => {},
+                Err(_e) => {/* If this happens its likely VOR failed to bind or initialize route routines */}
+            }
+
+        self.running = VORExecutionState::Stopped;
         thread::sleep(std::time::Duration::from_secs(1));
 
         if self.vor_router_config.async_mode {
