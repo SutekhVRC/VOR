@@ -1,5 +1,5 @@
 use rosc::decoder::MTU;
-use rosc::{self, OscPacket};
+use rosc::{self, OscPacket, encoder};
 use serde::{Deserialize, Serialize};
 use std::net::UdpSocket;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -178,6 +178,7 @@ async fn route_app_async(
         match rx.recv().await {
             Ok(b) => {
                 // Route buffer
+
                 match sock.send_to(&b, &rhp).await {
                     Ok(_bs) => {
                         if let Some(ref dbgs) = debug_sender {
@@ -234,6 +235,10 @@ fn parse_vrc_osc(
 ) {
     let pf_wl: Vec<String> = pf.address_wl.iter().map(|i| i.0.clone()).collect();
     let pf_bl: Vec<String> = pf.address_bl.iter().map(|i| i.0.clone()).collect();
+
+    // Here sending the decoded packet's buffer instead of the UDP buffer
+    // because some OSC libraries cant parse OSC packets with trailing NULL bytes.
+    // However if malformed OSC packets are relayed due to PF allowing bad packets through they will be sent with a full MTU (NULL BYTES PADDED)
     let mut buf = [0u8; MTU];
 
     loop {
@@ -253,7 +258,11 @@ fn parse_vrc_osc(
                                 Ok(ref pkt) => {
                                     if let OscPacket::Message(msg) = &pkt.1 {
                                         if pf_wl.contains(&msg.addr) {
-                                            bcst_tx.send(buf.to_vec()).unwrap();
+                                            // Here sending the decoded packet's buffer instead of the UDP buffer
+                                            // because some OSC libraries cant parse OSC packets with trailing NULL bytes.
+                                            // However if malformed OSC packets are relayed due to PF allowing bad packets through they will be sent with a full MTU (NULL BYTES PADDED)
+                                            let encoded_packet_buf = encoder::encode(&pkt.1).unwrap();
+                                            bcst_tx.send(encoded_packet_buf).unwrap();
                                             if let Some(ref dbgs) = debug_sender {
                                                 routedbg::send_indbg_packet(
                                                     dbgs,
@@ -308,7 +317,8 @@ fn parse_vrc_osc(
                                 Ok(ref pkt) => {
                                     if let OscPacket::Message(msg) = &pkt.1 {
                                         if !pf_bl.contains(&msg.addr) {
-                                            bcst_tx.send(buf.to_vec()).unwrap();
+                                            let encoded_packet_buf = encoder::encode(&pkt.1).unwrap();
+                                            bcst_tx.send(encoded_packet_buf).unwrap();
 
                                             if let Some(ref dbgs) = debug_sender {
                                                 routedbg::send_indbg_packet(
@@ -365,7 +375,9 @@ fn parse_vrc_osc(
                             if pf.filter_bad_packets {
                                 // If filter bad packets enabled check if bad packet
                                 if let Ok(pkt) = rosc::decoder::decode_udp(&buf) {
-                                    bcst_tx.send(buf.to_vec()).unwrap();
+
+                                    let encoded_packet_buf = encoder::encode(&pkt.1).unwrap();
+                                    bcst_tx.send(encoded_packet_buf).unwrap();
                                     if let Some(ref dbgs) = debug_sender {
                                         routedbg::send_indbg_packet(
                                             dbgs,
@@ -490,6 +502,7 @@ pub fn route_main(
     vrc_sock.set_nonblocking(false).unwrap();
     let _ = vrc_sock.set_read_timeout(Some(std::time::Duration::from_secs(1)));
 
+    // App route threads
     let mut artc = Vec::new();
 
     /*
@@ -501,13 +514,17 @@ pub fn route_main(
         async_rt = Some(tokio::runtime::Runtime::new().unwrap());
     }
 
+    // Router message broadcast channels
     let (bcst_tx, _bcst_rx) = broadcast::channel(vor_queue_size);
 
     for (app, id) in configs {
         let (router_tx, router_rx) = mpsc::channel();
         artc.push(router_tx);
 
+        // App status sender
         let app_stat_tx_at = app_stat_tx.clone();
+        
+        // Create new RX for broadcast channel
         let bcst_app_rx = bcst_tx.subscribe();
 
         let app_debug_sender_clone = debug_route_channels.clone();
@@ -556,6 +573,10 @@ pub fn route_main(
     //println!("[+] Started VRChat OSC Router.");
 
     // Listen for GUI events
+    // Add dynamic route handling here probably
+    /*
+        Handle Removing/Adding/Modifying Routes
+    */
     loop {
         match router_rx.recv().unwrap() {
             RouterMsg::ShutdownAll => {
