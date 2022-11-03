@@ -1149,6 +1149,7 @@ impl VORGUI {
 
             if wl_add_count >= 1 {
                 for i in 0..wl_add_count {
+                    let mut removed = false;
                     if !self.pf.address_wl[i].1 {
                         ui.horizontal(|ui| {
                             ui.group(|ui| {
@@ -1159,6 +1160,7 @@ impl VORGUI {
                                         .clicked()
                                     {
                                         self.pf.address_wl.remove(i);
+                                        removed = true;
                                     }
 
                                     if ui.button(RichText::new("Edit").monospace()).clicked() {
@@ -1167,6 +1169,9 @@ impl VORGUI {
                                 });
                             });
                         });
+
+                        // Restart loop to not crash
+                        if removed {break;}
                     } else {
                         //edit entry
                         ui.horizontal_wrapped(|ui| {
@@ -1235,16 +1240,19 @@ impl VORGUI {
 
             if bl_add_count >= 1 {
                 for i in 0..bl_add_count {
+                    let mut removed = false;
                     if !self.pf.address_bl[i].1 {
                         ui.horizontal(|ui| {
                             ui.group(|ui| {
                                 ui.label(egui::RichText::new(&self.pf.address_bl[i].0).monospace());
+                                
                                 ui.with_layout(Layout::right_to_left(), |ui| {
                                     if ui
                                         .button(RichText::new("-").monospace().color(Color32::RED))
                                         .clicked()
                                     {
                                         self.pf.address_bl.remove(i);
+                                        removed = true;
                                     }
 
                                     if ui.button(RichText::new("Edit").monospace()).clicked() {
@@ -1253,6 +1261,9 @@ impl VORGUI {
                                 });
                             });
                         });
+
+                        // Restart loop to not crash
+                        if removed {break;}
                     } else {
                         //edit entry
                         ui.horizontal_wrapped(|ui| {
