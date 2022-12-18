@@ -525,6 +525,7 @@ impl VORGUI {
                 &mut self.vor_router_config.bind_port,
             ));
         });
+        /* For feature never ended up adding
         ui.horizontal_wrapped(|ui| {
             ui.label("VRChat Host: ");
             ui.add(egui::TextEdit::singleline(
@@ -537,6 +538,7 @@ impl VORGUI {
                 &mut self.vor_router_config.vrc_port,
             ));
         });
+        */
         ui.horizontal_wrapped(|ui| {
             ui.label("VOR Buffer Queue Size: ");
             ui.add(egui::TextEdit::singleline(
@@ -830,6 +832,7 @@ impl VORGUI {
                 if self.configs[i].0.config_data.bind_host == self.configs[app_index].0.config_data.bind_host {
                     return AppConflicts::CONFLICT((self.configs[app_index].0.config_data.app_name.clone(), "Bind Host".to_string()))
                 }*/
+                /*
                 if self.configs[i].0.config_data.bind_port
                     == self.configs[app_index].0.config_data.bind_port
                 {
@@ -843,7 +846,7 @@ impl VORGUI {
                     == self.vor_router_config.bind_port
                 {
                     return AppConflicts::CONFLICT(("VOR".to_string(), "Bind Port".to_string()));
-                }
+                }*/
                 /*
                 if self.configs[i].0.config_data.app_host == self.configs[app_index].0.config_data.app_host {
                     return AppConflicts::CONFLICT((self.configs[app_index].0.config_data.app_name.clone(), "App Host".to_string()))
@@ -863,17 +866,19 @@ impl VORGUI {
             return InputValidation::AH(false);
         }
 
+        /*
         if !check_valid_ipv4(&self.configs[app_index].0.config_data.bind_host) {
             return InputValidation::BH(false);
-        }
+        }*/
 
         if !check_valid_port(&self.configs[app_index].0.config_data.app_port) {
             return InputValidation::AP(false);
         }
 
+        /*
         if !check_valid_port(&self.configs[app_index].0.config_data.bind_port) {
             return InputValidation::BP(false);
-        }
+        }*/
 
         return InputValidation::CLEAN;
     }
@@ -890,12 +895,13 @@ impl VORGUI {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("App Port: ");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.app_port));
                 });
+                /*
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Bind Host:");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_host));
                 });
                 ui.horizontal_wrapped(|ui| {
                     ui.label("Bind Port:");ui.add(egui::TextEdit::singleline(&mut self.new_app.as_mut().unwrap().config_data.bind_port));
-                });
+                });*/
 
                 ui.horizontal_wrapped(|ui| {
                     match &self.new_app_cf_exists_err {
@@ -927,7 +933,7 @@ impl VORGUI {
                                     self.new_app.as_mut().unwrap().config_path = format!("{}/.vor/VORAppConfigs/{}.json", get_user_home_dir(), self.new_app.as_ref().unwrap().config_data.app_name);
                                 }
 
-                                if !file_exists(&self.new_app.as_ref().unwrap().config_path) && self.vor_router_config.bind_port != self.new_app.as_ref().unwrap().config_data.bind_port {
+                                if !file_exists(&self.new_app.as_ref().unwrap().config_path) {
                                     self.configs.push((self.new_app.as_ref().unwrap().clone(), VORAppStatus::Stopped, AppConfigState::SAVED));
 
                                     match self.save_app_config(self.configs.len()-1, self.adding_new_app) {
@@ -946,11 +952,12 @@ impl VORGUI {
                                     }
                                 } else {//println!("[!] Config conflict!");
 
+                                    /*
                                     if self.vor_router_config.bind_port == self.new_app.as_ref().unwrap().config_data.bind_port {
                                         self.new_app_cf_exists_err = AppConfigCheck::AC(AppConflicts::CONFLICT((self.new_app.as_ref().unwrap().config_data.bind_port.clone(), "VOR bind port conflict".to_string())));
                                     } else {
                                         self.new_app_cf_exists_err = AppConfigCheck::AC(AppConflicts::CONFLICT((self.new_app.as_ref().unwrap().config_data.app_name.clone(), "App Name".to_string())));
-                                    }
+                                    }*/
                                 }
                             }
                         });
@@ -966,8 +973,8 @@ impl VORGUI {
                                 config_data: VORConfig {
                                     app_port: "9100".to_string(),
                                     app_host: "127.0.0.1".to_string(),
-                                    bind_port: "9101".to_string(),
-                                    bind_host: "127.0.0.1".to_string(),
+                                    //bind_port: "9101".to_string(),
+                                    //bind_host: "127.0.0.1".to_string(),
                                     app_name: "New App".to_string(),
                                 },
                             });// new_app defaults
@@ -1031,12 +1038,13 @@ impl VORGUI {
                         ui.horizontal_wrapped(|ui| {
                             ui.label("App Port: ");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.app_port));
                         });
+                        /*
                         ui.horizontal_wrapped(|ui| {
                             ui.label("Bind Host:");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_host));
                         });
                         ui.horizontal_wrapped(|ui| {
                             ui.label("Bind Port:");ui.add(egui::TextEdit::singleline(&mut self.configs[i].0.config_data.bind_port));
-                        });
+                        });*/
 
                         match chk {
                             AppConfigCheck::AC(c) => {

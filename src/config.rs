@@ -17,8 +17,8 @@ pub struct VORConfigWrapper {
 pub struct VORConfig {
     pub app_port: String,
     pub app_host: String,
-    pub bind_port: String,
-    pub bind_host: String,
+    //pub bind_port: String,
+    //pub bind_host: String,
     pub app_name: String,
 }
 
@@ -26,8 +26,8 @@ pub struct VORConfig {
 pub struct RouterConfig {
     pub bind_host: String,
     pub bind_port: String,
-    pub vrc_host: String,
-    pub vrc_port: String,
+    //pub vrc_host: String,
+    //pub vrc_port: String,
     pub vor_buffer_size: String,
     pub async_mode: bool,
 }
@@ -37,8 +37,8 @@ impl Default for RouterConfig {
         RouterConfig {
             bind_host: "127.0.0.1".to_string(),
             bind_port: "9001".to_string(),
-            vrc_host: "127.0.0.1".to_string(),
-            vrc_port: "9000".to_string(),
+            //vrc_host: "127.0.0.1".to_string(),
+            //vrc_port: "9000".to_string(),
             vor_buffer_size: "4096".to_string(),
             async_mode: true,
         }
@@ -87,6 +87,7 @@ pub enum AppConflicts {
     CONFLICT((String, String)),
 }
 
+#[allow(warnings)]
 #[derive(Clone)]
 pub enum InputValidation {
     AP(bool),

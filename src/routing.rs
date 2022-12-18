@@ -1,7 +1,7 @@
 use rosc::decoder::MTU;
 use rosc::{self, OscPacket, encoder};
 use serde::{Deserialize, Serialize};
-use std::net::UdpSocket;
+use std::net::{UdpSocket, Ipv4Addr};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use tokio::sync::broadcast::error::RecvError;
@@ -40,8 +40,8 @@ fn route_app(
     _debug_out_config: Option<routedbg::VORDebugOptions>,
 ) {
     let rhp = format!("{}:{}", app.app_host, app.app_port);
-    let lhp = format!("{}:{}", app.bind_host, app.bind_port);
-    let sock = match UdpSocket::bind(lhp) {
+    //let lhp = format!("{}:{}", app.bind_host, app.bind_port);
+    let sock = match UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)) {
         Ok(s) => s,
         Err(_e) => {
             let _ = app_stat_tx_at.send(app_error(
@@ -137,8 +137,8 @@ async fn route_app_async(
     _debug_out_config: Option<routedbg::VORDebugOptions>,
 ) {
     let rhp = format!("{}:{}", app.app_host, app.app_port);
-    let lhp = format!("{}:{}", app.bind_host, app.bind_port);
-    let sock = match tokio::net::UdpSocket::bind(lhp).await {
+    //let lhp = format!("{}:{}", app.bind_host, app.bind_port);
+    let sock = match tokio::net::UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await {
         Ok(s) => s,
         Err(_e) => {
             let _ = app_stat_tx_at.send(app_error(
