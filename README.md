@@ -77,14 +77,6 @@ App Port: The port your app is listening on.
     
 ![App Port](./images/add_app_port.png)
     
-Bind Host: The host/interface to bind the route UDP socket to (This will probably ALWAYS be 127.0.0.1).
-    
-![Route Bind Host](./images/add_app_bind_host.png)
-    
-Bind Port: The port to bind the route UDP socket to. This can be any port that is not being used anywhere else. These must be unique between every VOR app/route you add. NOTE: It is best to keep your bind ports in the higher range to reduce the likelihood of it interfering with another service.
-    
-![Route Bind Port](./images/add_app_bind_port.png)
-    
 Click Add
 
 4. Remember to set your OSC app's config to bind on the ports you set in VOR (The "App Ports" in VOR). And each OSC app should be sending directly to VRChat (VRChat default bind port is 9000).
