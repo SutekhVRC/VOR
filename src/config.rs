@@ -1,7 +1,6 @@
 use crate::{
-    routing::PacketFilter,
     vorerr::VORAppError,
-    vorutils::{file_exists, get_user_home_dir, path_exists},
+    vorutils::{file_exists, get_user_home_dir, path_exists}, pf::PacketFilter,
 };
 use core::fmt;
 use serde::{Deserialize, Serialize};
