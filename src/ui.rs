@@ -1,3 +1,4 @@
+use crate::pf::PacketFilter;
 use crate::routedbg::DebugPacket;
 use crate::VCArgs;
 use crate::{
@@ -6,7 +7,7 @@ use crate::{
         VORAppIdentifier, VORAppStatus, VORConfig, VORConfigWrapper,
     },
     routedbg,
-    routing::{route_main, PacketFilter, RouterMsg},
+    routing::{route_main, RouterMsg},
     vorupdate::{VORUpdater, VERSION},
     vorutils::{check_valid_ipv4, check_valid_port, file_exists, get_user_home_dir},
 };
@@ -448,6 +449,7 @@ impl VORGUI {
                             .unwrap()
                             .vor_dbg_packets
                             .insert(0, dbg_pkt);
+                        self.route_debug.as_mut().unwrap().vor_dbg_packets.truncate(8192);
                     }
                     Err(_err) => break, /* Failed to read from debug channel */
                 }
