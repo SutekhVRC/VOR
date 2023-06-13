@@ -18,6 +18,7 @@ pub struct PacketFilter {
     pub address_bl: Vec<(String, bool)>,
 }
 
+#[inline]
 pub fn packet_filter(
     pf: &PacketFilter,
     buf: [u8; MTU],
