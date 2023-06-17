@@ -1,8 +1,9 @@
 use crate::{
     vorerr::VORAppError,
-    vorutils::{file_exists, get_user_home_dir, path_exists}, pf::PacketFilter,
+    vorutils::{file_exists, path_exists}, pf::PacketFilter,
 };
 use core::fmt;
+use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -117,17 +118,31 @@ impl fmt::Display for InputValidation {
     }
 }
 
+pub fn vor_root() -> Option<String> {
+    let bd = match BaseDirs::new() {
+        Some(bd) => bd,
+        None => return None,
+    };
+
+    let mut path_str = match bd.data_dir().to_str() {
+        Some(data_dir_str) => data_dir_str.to_string(),
+        None => return None,
+    };
+    //println!("PATH_STR = {}", path_str);
+    path_str.push_str("\\VOR");
+
+    Some(path_str)
+}
+
 fn read_configs() -> (RouterConfig, Vec<VORConfigWrapper>, PacketFilter) {
+    
     let mut configs = Vec::<VORConfigWrapper>::new();
 
     #[cfg(target_os = "linux")]
     let vor_root_dir = format!("{}/.vor", get_user_home_dir());
 
     #[cfg(target_os = "windows")]
-    let vor_root_dir = format!(
-        "{}\\AppData\\Roaming\\VOR",
-        get_user_home_dir()
-    );
+    let vor_root_dir = vor_root().expect("[-] Roaming directory can't be found!");
 
     let vor_config_file;
     let vor_app_configs_dir;
@@ -287,7 +302,7 @@ pub fn config_construct() -> (
     let (vor_router_config, configs, pf) = read_configs();
     /*
     if configs.len() < 1 {
-        //println!("[?] Please put OSC application VOR configs in the [\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs] directory.");
+        //println!("[?] Please put OSC application VOR configs in the [\\AppData\\Roaming\\VOR\\VORAppConfigs] directory.");
     } else {
         for c in &configs {
             //println!("[App]: {}\n [*] Route -> {}:{}", c.config_data.app_name, c.config_data.app_host, c.config_data.app_port);

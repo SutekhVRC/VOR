@@ -30,6 +30,7 @@ pub fn file_exists(p: &String) -> bool {
     Path::new(&p).is_file()
 }
 
+#[allow(unused)]
 pub fn get_user_home_dir() -> String {
     let bd = BaseDirs::new().expect("[-] Could not get user's directories.");
     let bd = bd

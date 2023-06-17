@@ -1,3 +1,4 @@
+use crate::config::vor_root;
 use crate::pf::PacketFilter;
 use crate::routedbg::DebugPacket;
 use crate::VCArgs;
@@ -9,7 +10,7 @@ use crate::{
     routedbg,
     routing::{route_main, RouterMsg},
     vorupdate::{VORUpdater, VERSION},
-    vorutils::{check_valid_ipv4, check_valid_port, file_exists, get_user_home_dir},
+    vorutils::{check_valid_ipv4, check_valid_port, file_exists},
 };
 
 use eframe::egui::{
@@ -733,8 +734,8 @@ impl VORGUI {
         {
             fs::write(
                 format!(
-                    "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORConfig.json",
-                    get_user_home_dir()
+                    "{}\\VORConfig.json",
+                    vor_root().expect("[-] Roaming directory can't be found!")
                 ),
                 serde_json::to_string(&self.vor_router_config).unwrap(),
             )
@@ -795,8 +796,8 @@ impl VORGUI {
         #[cfg(target_os = "windows")]
         {
             self.configs[app_index].0.config_path = format!(
-                "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs\\{}.json",
-                get_user_home_dir(),
+                "{}\\VORAppConfigs\\{}.json",
+                vor_root().expect("[-] Roaming directory can't be found!"),
                 self.configs[app_index].0.config_data.app_name
             );
         }
@@ -927,7 +928,7 @@ impl VORGUI {
 
                                 #[cfg(target_os = "windows")]
                                 {
-                                    self.new_app.as_mut().unwrap().config_path = format!("{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VORAppConfigs\\{}.json", get_user_home_dir(), self.new_app.as_ref().unwrap().config_data.app_name);
+                                    self.new_app.as_mut().unwrap().config_path = format!("{}\\VORAppConfigs\\{}.json", vor_root().expect("[-] Roaming directory can't be found!"), self.new_app.as_ref().unwrap().config_data.app_name);
                                 }
 
                                 #[cfg(target_os = "linux")]
@@ -1155,8 +1156,8 @@ impl VORGUI {
         {
             fs::write(
                 format!(
-                    "{}\\AppData\\LocalLow\\VRChat\\VRChat\\OSC\\VOR\\VOR_PF.json",
-                    get_user_home_dir()
+                    "{}\\VOR_PF.json",
+                    vor_root().expect("[-] Roaming directory can't be found!")
                 ),
                 serde_json::to_string(&self.pf).unwrap(),
             )
