@@ -8,8 +8,8 @@ An example setup using VOR with two other OSC applications that receive data fro
 ### Applications
 
 In this example we will be setting VOR up with two commonly used applications:
-- (bHaptics OSC application)[https://github.com/bhaptics/VRChatOSC]
-- (VRCFaceTracking OSC application)[https://github.com/benaclejames/VRCFaceTracking]
+- [bHaptics OSC application](https://github.com/bhaptics/VRChatOSC)
+- [VRCFaceTracking OSC application](https://github.com/benaclejames/VRCFaceTracking)
 
 ### TLDR;
 

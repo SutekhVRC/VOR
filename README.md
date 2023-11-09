@@ -4,7 +4,7 @@
 
 [![Github All Releases](https://img.shields.io/github/downloads/SutekhVRC/VOR/total.svg)]()
 
-Example setup of bHaptics and VRCFaceTracking with VOR [here]().
+Example setup of bHaptics and VRCFaceTracking with VOR [here](https://github.com/SutekhVRC/VOR/blob/main/docs/example.md).
 
 Questions and help: [SutekhVRC Discord](https://discord.gg/g6kUFtMtpw)
 
