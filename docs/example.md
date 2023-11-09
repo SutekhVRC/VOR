@@ -5,6 +5,11 @@ An example setup using VOR with two other OSC applications that receive data fro
 
 ## Example setup
 
+### Important Note Regarding the bHaptics Application
+
+The bHaptics app will suffer in certain circumstances when an avatar is overloading the application with OSC updates.
+The current fix is to use the Packet Filter (PF) in VOR to filter out the "spammy" parameters.
+
 ### Applications
 
 In this example we will be setting VOR up with two commonly used applications:
