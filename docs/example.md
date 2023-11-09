@@ -9,6 +9,10 @@ An example setup using VOR with two other OSC applications that receive data fro
 
 The bHaptics app will suffer in certain circumstances when an avatar is overloading the application with OSC updates.
 The current fix is to use the Packet Filter (PF) in VOR to filter out the "spammy" parameters.
+- My premade config for common spammy parameters can be found [here](https://github.com/SutekhVRC/VOR/blob/main/Premade-Configs/PF/Filter%20VRChat%20Spam/VOR_PF.json).
+Replace your current config with the above linked VOR_PF json file. The app config directory will be different depending on the platform you are on (Linux or Windows).
+The windows VOR configuration folder is in your AppData Roaming directory.
+On Linux it may vary.
 
 ### Applications
 
