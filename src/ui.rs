@@ -1,7 +1,8 @@
+#[cfg(target_os = "linux")]
+use crate::vorutils::get_user_home_dir;
 use crate::config::vor_root;
 use crate::pf::PacketFilter;
 use crate::routedbg::DebugPacket;
-use crate::vorutils::get_user_home_dir;
 use crate::VCArgs;
 use crate::{
     config::{
