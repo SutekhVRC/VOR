@@ -1,3 +1,5 @@
+#[cfg(target_os = "linux")]
+use crate::vorutils::get_user_home_dir;
 use crate::{
     vorerr::VORAppError,
     vorutils::{file_exists, path_exists}, pf::PacketFilter,
