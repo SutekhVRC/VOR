@@ -108,7 +108,7 @@ Click Add
 - VOR Buffer Queue Size: The route buffer size 4096 is default. (You dont want this to be too low because in high load situations it could cause packet loss)
 
 ### Routing mode
-- Asynchronous routing: Default is enabled. Asynchronous routing enabled will drastically improve efficiency. I recommend using asynchronous mode. If you disable this you may get more responsive routing as the cost of higher CPU usage.
+- Asynchronous routing: Default is enabled. Asynchronous routing enabled will drastically improve efficiency. I recommend using asynchronous mode. If you disable this you may get more responsive routing at the cost of higher CPU usage.
 
 ## OSC Debug Mode
 
